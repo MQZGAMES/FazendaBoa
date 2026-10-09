@@ -1,5 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 
 /** Gera o service worker com a lista de arquivos do build (cache offline completo). */
 function serviceWorker(): Plugin {
@@ -39,8 +41,18 @@ function devSnapshots(): Plugin {
   };
 }
 
+/** Hash do código que gera a arte: muda → o cache de sprites no IndexedDB é refeito. */
+function artHash(): string {
+  const h = createHash('sha1');
+  for (const dir of ['src/art', 'src/data']) {
+    for (const f of readdirSync(dir).sort()) h.update(readFileSync(join(dir, f)));
+  }
+  return h.digest('hex').slice(0, 10);
+}
+
 export default defineConfig({
   base: './',
+  define: { __ART_HASH__: JSON.stringify(artHash()) },
   plugins: [serviceWorker(), devSnapshots()],
   server: { host: true, port: 5173 },
   preview: { port: 4173 },
