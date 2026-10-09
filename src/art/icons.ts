@@ -79,25 +79,20 @@ export function drawTool(pc: PixelCanvas, tool: string, tier: number): void {
 /* ---------- Itens ---------- */
 type ItemDraw = (pc: PixelCanvas) => void;
 
-function seedPacket(col: Color, col2: Color): ItemDraw {
-  return (pc) => {
-    pc.rect(3, 2, 10, 13, P.parch2);
-    pc.hline(3, 12, 2, P.parch3); pc.vline(3, 2, 14, P.parch3); pc.vline(12, 3, 14, P.parch0); pc.hline(4, 12, 14, P.parch0);
-    pc.hline(3, 12, 4, P.parch1); // dobra
-    pc.ellipse(8, 9.5, 3, 3, col); pc.set(7, 8, col2); pc.set(9, 10, mix(col, P.black, 0.3));
-    pc.set(8, 6, P.green); pc.set(9, 5, P.green);
-    finish(pc);
-  };
-}
-
 const ITEMS: Record<string, ItemDraw> = {
-  seed_parsnip: seedPacket(rgb('#f2e2b0'), rgb('#fff8e0')),
-  parsnip: (pc) => {
-    // raiz cremosa com folhas
-    const body: [number, number, number][] = [[7, 6, 3], [7, 7, 3.5], [7, 8, 3.5], [7, 9, 3], [7, 10, 2.5], [7, 11, 2], [8, 12, 1.5], [8, 13, 1]];
-    for (const [cx, y, r] of body) for (let x = Math.floor(cx - r); x <= cx + r; x++) pc.set(x, y, x < cx - 1 ? rgb('#fff6d8') : x > cx + 1 ? rgb('#d8b878') : rgb('#f2e0a8'));
-    pc.set(6, 9, rgb('#c8a060')); pc.set(8, 11, rgb('#c8a060'));
-    pc.line(7, 5, 5, 1, P.leaf2); pc.line(8, 5, 9, 1, P.leaf3); pc.line(8, 5, 11, 2, P.leaf2); pc.set(6, 3, P.leaf3);
+  acorn: (pc) => {
+    pc.ellipse(8, 10, 4, 4.5, P.wood3); pc.set(6, 9, P.wood4); pc.set(9, 12, P.wood1);
+    pc.ellipse(8, 6, 5, 2.5, P.wood1); pc.hline(5, 10, 5, P.wood2); pc.vline(8, 2, 4, P.wood0);
+    finish(pc);
+  },
+  maple_seed: (pc) => {
+    pc.ellipse(5, 11, 2, 2, P.wood2);
+    pc.line(6, 10, 13, 3, rgb('#c8a060')); pc.line(6, 11, 13, 5, rgb('#e0bc7a')); pc.line(7, 11, 12, 7, rgb('#c8a060'));
+    finish(pc);
+  },
+  pinecone: (pc) => {
+    for (let y = 3; y < 14; y++) { const w = 1 + Math.sin(((y - 3) / 11) * Math.PI) * 3.5; pc.hline(Math.round(8 - w), Math.round(8 + w), y, y % 2 ? P.wood2 : P.wood1); }
+    for (let y = 4; y < 13; y += 2) { pc.set(6, y, P.wood3); pc.set(9, y + 1, P.wood3); }
     finish(pc);
   },
   wood: (pc) => {
@@ -373,4 +368,13 @@ export function addIcons(ab: AtlasBuilder): void {
   ab.add('joy_base', 60, 60, joyBase);
   ab.add('joy_knob', 26, 26, joyKnob);
   ab.add('target_corner', 5, 5, targetCorner);
+  ab.add('sweat', 3, 5, (pc) => { pc.set(1, 0, rgb('#cfefff')); pc.rect(0, 1, 3, 3, rgb('#8ad0f8')); pc.set(0, 1, rgb('#ffffff')); pc.hline(1, 2, 4, rgb('#4a90d8')); });
+  ab.add('drop', 2, 3, (pc) => { pc.set(0, 0, rgb('#cfefff')); pc.rect(0, 1, 2, 2, rgb('#6ab8f0')); });
+  ab.add('spark', 7, 7, (pc) => { pc.vline(3, 0, 6, rgb('#fff6c0')); pc.hline(0, 6, 3, rgb('#fff6c0')); pc.set(3, 3, P.white); pc.set(2, 2, rgb('#ffe680')); pc.set(4, 4, rgb('#ffe680')); pc.set(4, 2, rgb('#ffe680')); pc.set(2, 4, rgb('#ffe680')); });
+  ab.add('chip_dirt', 3, 3, (pc) => { pc.rect(0, 0, 3, 3, P.soil2); pc.set(0, 0, P.soil3); pc.set(2, 2, P.soil0); });
+  ab.add('chip_wood', 3, 2, (pc) => { pc.rect(0, 0, 3, 2, P.wood3); pc.set(2, 1, P.wood1); });
+  ab.add('chip_stone', 3, 3, (pc) => { pc.rect(0, 0, 3, 3, P.stone2); pc.set(0, 0, P.stone4); pc.set(2, 2, P.stone1); });
+  ab.add('chip_leaf', 3, 3, (pc) => { pc.set(1, 0, P.leaf3); pc.rect(0, 1, 3, 1, P.leaf2); pc.set(1, 2, P.leaf1); });
+  ab.add('rain', 32, 32, (pc) => { for (let i = 0; i < 9; i++) { const x = (i * 11) % 32, y = (i * 7) % 32; pc.line(x, y, x - 2, y + 6, rgb('#cde6ff', 150)); } });
+  ab.add('snow', 32, 32, (pc) => { for (let i = 0; i < 7; i++) { const x = (i * 13 + 3) % 32, y = (i * 9 + 5) % 32; pc.set(x, y, P.white); if (i % 2) { pc.set(x + 1, y, rgb('#e6f0ff')); pc.set(x, y + 1, rgb('#e6f0ff')); } } });
 }

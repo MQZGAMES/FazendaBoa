@@ -51,6 +51,8 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+window.addEventListener('pagehide', () => { if (game.scene.isActive('World')) void saveGame(); });
+
 // Reduz o risco de o navegador apagar o save
 if (navigator.storage && navigator.storage.persist) void navigator.storage.persist().catch(() => undefined);
 
@@ -65,5 +67,17 @@ document.addEventListener('dblclick', (e) => e.preventDefault());
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
-declare global { interface Window { __game?: Phaser.Game; } }
-if (import.meta.env.DEV) window.__game = game;
+declare global { interface Window { __game?: Phaser.Game; __snap?: (name: string, steps?: number) => Promise<string>; } }
+if (import.meta.env.DEV) {
+  window.__game = game;
+  /** Avança N quadros manualmente e envia uma captura para .snaps/<name>.png (pane oculto não renderiza). */
+  window.__snap = (name: string, steps = 2) => new Promise((resolve) => {
+    let t = performance.now();
+    for (let i = 0; i < steps; i++) { t += 16.7; game.step(t, 16.7); }
+    game.renderer.snapshot((img) => {
+      const src = (img as HTMLImageElement).src;
+      void fetch('/__snap?name=' + name, { method: 'POST', body: src }).then(() => resolve('ok'));
+    });
+    game.step(t + 16.7, 16.7);
+  });
+}

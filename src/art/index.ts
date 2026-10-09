@@ -3,6 +3,8 @@ import { AtlasBuilder, registerAtlas, canvasToBlob, blobToImage, freeCanvas, pix
 import { addNature } from './nature';
 import { addIcons } from './icons';
 import { addBuildings } from './buildings';
+import { addCrops } from './crops';
+import { addFurniture } from './furniture';
 import { addPlayer, type Appearance } from './character';
 import { buildTerrain, waterTextures, type TerrainIndex } from './terrain';
 import { buildFonts, buildTinyFont } from './font';
@@ -20,6 +22,8 @@ function mainAtlas(): AtlasBuilder {
   addNature(ab);
   addBuildings(ab);
   addIcons(ab);
+  addCrops(ab);
+  addFurniture(ab);
   return ab;
 }
 

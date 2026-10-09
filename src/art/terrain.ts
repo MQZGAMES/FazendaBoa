@@ -288,7 +288,7 @@ export function buildTerrain(): TerrainBuild {
   // Tileset com extrusão de 1px (margin 1, spacing 2) contra costuras.
   const cols = 28, stride = 18;
   const rows = Math.ceil(tiles.length / cols);
-  const W = 1 + cols * stride, H = 1 + rows * stride;
+  const W = cols * stride, H = rows * stride;
   const W2 = W, H2 = H;
   const page = new PixelCanvas(W2, H2);
   tiles.forEach((t, i) => {

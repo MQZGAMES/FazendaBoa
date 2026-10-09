@@ -4,6 +4,7 @@ import { OBJ, TREE_NAMES, type WObj } from '../data/objects';
 import { TERRAIN } from '../art';
 import { MASK_TO_AUTO, AN, ANE, AE, ASE, AS, ASW, AW, ANW, GRASS_VARIANTS, GRASS_WEIGHTS } from '../art/terrain';
 import { ROCK_KINDS } from '../art/nature';
+import { CROP_STAGES } from '../data/crops';
 import { hash2 } from '../art/rng';
 import { TILE } from '../config';
 
@@ -18,6 +19,8 @@ interface ObjSprite {
   baseY: number;
   key: string;
 }
+
+interface CropSprite { spr: Phaser.GameObjects.Image; gen: number; ready: boolean; }
 
 const GRASS_TOTAL = GRASS_WEIGHTS.reduce((a, b) => a + b, 0);
 function grassVariant(x: number, y: number): number {
@@ -43,11 +46,12 @@ export function objFrame(o: WObj, season: number): string {
     case 'fence': return `fence_${o.v}`;
     case 'mailbox': return 'mailbox';
     case 'ore': return `rock_${ROCK_KINDS[o.t ?? 0]}_${o.v}`;
+    default: return o.k;
   }
 }
 
 /** Ajuste vertical (px) do sprite em relação à base do tile. */
-const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1 };
+const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1, bed: 1, tv: 1, table: 2, chair: 1, plant: 1, lamp: 1, shelf: 1, fireplace: 0, window: -2 };
 
 /**
  * Renderização de um mapa: tilemap com autotiling, água animada e objetos
@@ -69,6 +73,11 @@ export class LocationView {
   private gen = 0;
   private lastRect = { x0: -1, y0: -1, x1: -1, y1: -1, rev: -1 };
   private wb = { x0: 0, y0: 0, x1: 0, y1: 0 };
+  private cropSpr = new Map<number, CropSprite>();
+  private cropPool: Phaser.GameObjects.Image[] = [];
+  private readyList: Phaser.GameObjects.Image[] = [];
+  private sparks: Phaser.GameObjects.Image[] = [];
+  private sparkT = 0;
   private swayList: ObjSprite[] = [];
   private treeList: ObjSprite[] = [];
   time = 0;
@@ -221,6 +230,55 @@ export class LocationView {
 
   spriteOf(anchor: number): Phaser.GameObjects.Image | null { return this.active.get(anchor)?.spr ?? null; }
 
+  /* ---------- Plantações ---------- */
+  private applyCrop(cs: CropSprite, i: number): void {
+    const c = this.loc.crops.get(i)!;
+    const x = i % this.loc.w, y = Math.floor(i / this.loc.w);
+    cs.ready = !c.dead && c.stage >= CROP_STAGES - 1;
+    cs.spr.setFrame(c.dead ? 'crop_dead' : `crop_${c.id}_${c.stage}`).setOrigin(0.5, 1).setPosition(x * TILE + 8, (y + 1) * TILE + 2).setDepth((y + 1) * TILE - 3);
+  }
+
+  refreshCrop(i: number): void {
+    const cs = this.cropSpr.get(i);
+    const c = this.loc.crops.get(i);
+    if (cs && !c) { cs.spr.setVisible(false); this.cropPool.push(cs.spr); this.cropSpr.delete(i); }
+    else if (cs && c) this.applyCrop(cs, i);
+    else if (!cs && c) {
+      const spr = this.cropPool.pop()?.setVisible(true) ?? this.scene.add.image(0, 0, 'atlas', 'px');
+      const n: CropSprite = { spr, gen: this.gen, ready: false };
+      this.cropSpr.set(i, n);
+      this.applyCrop(n, i);
+      // pequeno "pop" ao plantar
+      spr.setScale(0.6, 1.3);
+      this.scene.tweens.add({ targets: spr, scaleX: 1, scaleY: 1, duration: 160, ease: 'Back.easeOut' });
+    }
+    this.rebuildReady();
+  }
+
+  private rebuildReady(): void {
+    this.readyList.length = 0;
+    for (const cs of this.cropSpr.values()) if (cs.ready) this.readyList.push(cs.spr);
+  }
+
+  /** Reconstrói solo e plantações (após virar o dia). */
+  rebuildAll(): void {
+    this.buildSoil();
+    for (const [i, cs] of this.cropSpr) {
+      if (this.loc.crops.has(i)) this.applyCrop(cs, i);
+      else { cs.spr.setVisible(false); this.cropPool.push(cs.spr); this.cropSpr.delete(i); }
+    }
+    this.lastRect.rev = -1;
+    this.rebuildReady();
+  }
+
+  /** Abre a tampa da caixa de envio por um instante. */
+  flashBin(x: number, y: number): void {
+    const os = this.active.get(this.loc.idx(x, y));
+    if (!os) return;
+    os.spr.setFrame('bin_open');
+    this.scene.time.delayedCall(600, () => { if (os.key === 'bin') os.spr.setFrame('bin'); });
+  }
+
   private release(os: ObjSprite): void {
     os.spr.setVisible(false);
     this.pool.push(os.spr);
@@ -251,6 +309,16 @@ export class LocationView {
       if (L.terrain[i] === T.Water) {
         if (x < wb.x0) wb.x0 = x; if (x > wb.x1) wb.x1 = x; if (y < wb.y0) wb.y0 = y; if (y > wb.y1) wb.y1 = y;
       }
+      if (L.crops.has(i)) {
+        let cs = this.cropSpr.get(i);
+        if (!cs) {
+          const spr = this.cropPool.pop()?.setVisible(true) ?? this.scene.add.image(0, 0, 'atlas', 'px');
+          cs = { spr, gen: g, ready: false };
+          this.cropSpr.set(i, cs);
+          this.applyCrop(cs, i);
+        }
+        cs.gen = g;
+      }
       const o = L.objs.get(i);
       if (!o) continue;
       let os = this.active.get(i);
@@ -264,7 +332,11 @@ export class LocationView {
     for (const [k, os] of this.active) {
       if (os.gen !== g || !L.objs.has(k)) { this.release(os); this.active.delete(k); }
     }
+    for (const [k, cs] of this.cropSpr) {
+      if (cs.gen !== g || !L.crops.has(k)) { cs.spr.setVisible(false); this.cropPool.push(cs.spr); this.cropSpr.delete(k); }
+    }
     this.rebuildLists();
+    this.rebuildReady();
     if (this.water && this.waterHi) {
       if (wb.x1 < 0) { this.water.setVisible(false); this.waterHi.setVisible(false); }
       else {
@@ -284,6 +356,18 @@ export class LocationView {
       this.water.setTilePosition(x + Math.sin(this.time * 0.6) * 3, y - this.time * 3);
       this.waterHi.setTilePosition(x - this.time * 5, y + Math.sin(this.time * 0.9) * 4);
     }
+    // brilho pulsante nas plantações prontas
+    this.sparkT -= dt;
+    if (this.sparkT <= 0 && this.readyList.length) {
+      this.sparkT = 0.45;
+      const spr = this.readyList[Math.floor(Math.random() * this.readyList.length)];
+      let sp = this.sparks.find((q) => !q.visible);
+      if (!sp && this.sparks.length < 6) { sp = this.scene.add.image(0, 0, 'atlas', 'spark'); this.sparks.push(sp); }
+      if (sp) {
+        sp.setVisible(true).setPosition(spr.x + (Math.random() - 0.5) * 10, spr.y - 6 - Math.random() * 12).setDepth(spr.depth + 1).setScale(0.2).setAlpha(1);
+        this.scene.tweens.add({ targets: sp, scale: 1, alpha: 0, duration: 520, ease: 'Quad.easeOut', onComplete: () => sp!.setVisible(false) });
+      }
+    }
     // vento: balanço leve de mato, grama alta e copas
     for (let i = 0; i < this.swayList.length; i++) {
       const os = this.swayList[i];
@@ -301,6 +385,9 @@ export class LocationView {
 
   destroy(): void {
     for (const os of this.active.values()) { os.spr.destroy(); os.sh?.destroy(); }
+    for (const cs of this.cropSpr.values()) cs.spr.destroy();
+    for (const s of this.cropPool) s.destroy();
+    for (const s of this.sparks) s.destroy();
     for (const s of this.pool) s.destroy();
     for (const s of this.shPool) s.destroy();
     this.active.clear();

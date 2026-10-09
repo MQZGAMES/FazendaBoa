@@ -14,6 +14,9 @@ import { Toast } from '../ui/Toast';
 import { uiState } from '../ui/state';
 import { uiTex, txt } from '../ui/widgets';
 import { DebugPanel } from '../ui/DebugPanel';
+import { Dialog, Summary, Pickups } from '../ui/Dialogs';
+import { GameMenu, SettingsPanel } from '../ui/Menus';
+import { topModal, anyModal } from '../ui/Modal';
 
 interface SecBtn { id: string; icon: string; bg: Phaser.GameObjects.Image; ic: Phaser.GameObjects.Image; x: number; y: number; r: number; visible: boolean; }
 
@@ -26,6 +29,11 @@ export class UIScene extends Phaser.Scene {
   private energy!: EnergyBar;
   private toast!: Toast;
   private debug!: DebugPanel;
+  private dialog!: Dialog;
+  private summary!: Summary;
+  private menu!: GameMenu;
+  private settingsPanel!: SettingsPanel;
+  private pickups!: Pickups;
   private actBg!: Phaser.GameObjects.Image;
   private actIcon!: Phaser.GameObjects.Image;
   private act = { x: 0, y: 0, r: 40 };
@@ -36,9 +44,11 @@ export class UIScene extends Phaser.Scene {
   private secDown: SecBtn | null = null;
   private hbPointer = -1;
   private hbStart = { x: 0, y: 0, t: 0, idx: -1, moved: false, long: false };
+  private modalPointer = -1;
   private clockTaps: number[] = [];
   private joyZoneTop = 0;
   private fpsText!: Phaser.GameObjects.BitmapText;
+  private hudItems: Phaser.GameObjects.GameObject[] = [];
 
   constructor() { super('UI'); }
 
@@ -51,6 +61,11 @@ export class UIScene extends Phaser.Scene {
     this.hotbar = new Hotbar(this);
     this.toast = new Toast(this);
     this.debug = new DebugPanel(this);
+    this.pickups = new Pickups(this);
+    this.dialog = new Dialog(this);
+    this.summary = new Summary(this);
+    this.settingsPanel = new SettingsPanel(this, () => { this.joy.applySize(); this.layout(); });
+    this.menu = new GameMenu(this, () => this.settingsPanel.present(), () => this.toTitle(), () => this.reloadWorld());
     this.actBg = this.add.image(0, 0, 'atlas', 'ui_btn_round').setScale(UI).setDepth(10);
     this.actIcon = this.add.image(0, 0, 'atlas', 'icon_hand').setScale(UI * 1.5).setDepth(11);
     const defs: [string, string][] = [['inv', 'icon_bag'], ['craft', 'icon_hammer'], ['map', 'icon_map'], ['menu', 'icon_menu']];
@@ -60,6 +75,7 @@ export class UIScene extends Phaser.Scene {
       this.sec.push({ id, icon: ic, bg, ic: im, x: 0, y: 0, r: 22, visible: true });
     }
     this.fpsText = txt(this, 0, 0, '', 'light', 1.5).setDepth(60).setVisible(false);
+    this.hudItems = [this.money.c, this.clock.c, this.energy.c, this.hotbar.c, this.actBg, this.actIcon, ...this.sec.flatMap((s) => [s.bg, s.ic])];
 
     this.input.on('pointerdown', this.onDown, this);
     this.input.on('pointermove', this.onMove, this);
@@ -73,12 +89,22 @@ export class UIScene extends Phaser.Scene {
     bus.on('hotbar', () => this.hotbar.refresh(), this);
     bus.on('time', () => this.clock.refresh(), this);
     bus.on('day', () => this.clock.refresh(), this);
+    bus.on('pickup', (id, q) => this.pickups.push(id, q), this);
+    bus.on('dialog', (r) => { this.releaseAll(); this.dialog.ask(r); }, this);
+    bus.on('menu', (m) => this.openMenu(m), this);
     this.events.once('shutdown', () => {
-      bus.off('resize', this.layout, this); bus.off('toast', undefined, this); bus.off('inventory', undefined, this);
-      bus.off('hotbar', undefined, this); bus.off('time', undefined, this); bus.off('day', undefined, this);
+      for (const ev of ['resize', 'toast', 'inventory', 'hotbar', 'time', 'day', 'pickup', 'dialog', 'menu'] as const) bus.off(ev, undefined, this);
     });
     this.layout();
   }
+
+  /** Mostra o resumo do dia (chamado pelo mundo ao dormir). */
+  showSummary(s: import('../systems/DayCycle').DaySummary, done: () => void): void {
+    this.releaseAll();
+    this.summary.present(s, done);
+  }
+
+  setHudVisible(v: boolean): void { for (const o of this.hudItems) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(v); }
 
   /** Posiciona tudo conforme tamanho da tela e áreas seguras. */
   layout(): void {
@@ -93,14 +119,12 @@ export class UIScene extends Phaser.Scene {
     this.money.c.setPosition(s.left + pad, top);
     this.clock.c.setPosition(W - s.right - pad - this.clock.w, top);
     this.hotbar.layout(W, H - s.bottom - pad, s.left, s.right);
-    // botão de ação (canhoto: espelha)
     const left = settings.leftHanded;
     const ax = left ? s.left + pad + 44 : W - s.right - pad - 44;
     const ay = this.hotbar.top - 14 - 40;
     this.act.x = ax; this.act.y = ay;
     this.actBg.setPosition(ax, ay);
     this.actIcon.setPosition(ax, ay);
-    // botões secundários em arco ao redor da ação
     const R = 92;
     const angs = [90, 122, 154, 186];
     let k = 0;
@@ -110,7 +134,6 @@ export class UIScene extends Phaser.Scene {
       b.y = Math.round(ay - Math.sin(a) * R);
       b.bg.setPosition(b.x, b.y); b.ic.setPosition(b.x, b.y);
     }
-    // energia na lateral
     const ex = left ? s.left + pad : W - s.right - pad - this.energy.w;
     const ey = ay - R - 30 - this.energy.h;
     this.energy.c.setPosition(ex, Math.max(top + this.clock.h + 12, ey));
@@ -118,6 +141,7 @@ export class UIScene extends Phaser.Scene {
     this.joyZoneTop = H * 0.65 - 40;
     this.fpsText.setPosition(s.left + pad, top + this.money.h + 6);
     this.debug.layout(s.left + pad, top + this.money.h + 26, W);
+    this.pickups.layout(s.left + pad, this.hotbar.top - 8);
   }
 
   private css(p: Phaser.Input.Pointer): { x: number; y: number } {
@@ -128,7 +152,8 @@ export class UIScene extends Phaser.Scene {
     const { x, y } = this.css(p);
     input.lastActive = performance.now();
     if (this.debug.visible && this.debug.handle(x, y)) return;
-    if (uiState.panelOpen) return;
+    const m = topModal();
+    if (m) { this.modalPointer = p.id; m.down(x, y); return; }
     // botão de ação
     const dx = x - this.act.x, dy = y - this.act.y;
     if (dx * dx + dy * dy <= (this.act.r + 10) * (this.act.r + 10)) {
@@ -153,7 +178,6 @@ export class UIScene extends Phaser.Scene {
       this.selectSlot(hi);
       return;
     }
-    // relógio: 5 toques abre o debug
     const cc = this.clock.c;
     if (x >= cc.x && x <= cc.x + this.clock.w && y >= cc.y && y <= cc.y + this.clock.h) {
       const now = performance.now();
@@ -162,12 +186,10 @@ export class UIScene extends Phaser.Scene {
       if (this.clockTaps.length >= 5 && DEBUG_ALLOWED) { this.clockTaps = []; this.debug.toggle(); }
       return;
     }
-    // joystick: metade esquerda, parte inferior
     if (!this.joy.active && x < display.cssW / 2 && y >= this.joyZoneTop && y < this.hotbar.top - 2) {
       this.joy.start(p.id, x, y);
       return;
     }
-    // toque direto no mundo
     const world = this.scene.get('World');
     if (world && world.sys.isActive()) {
       const wp = world.cameras.main.getWorldPoint(p.x, p.y);
@@ -178,6 +200,7 @@ export class UIScene extends Phaser.Scene {
   private onMove(p: Phaser.Input.Pointer): void {
     if (!p.isDown) return;
     const { x, y } = this.css(p);
+    if (p.id === this.modalPointer) { topModal()?.move(x, y); return; }
     if (p.id === this.joy.pointerId) { this.joy.move(x, y); return; }
     if (p.id === this.hbPointer) {
       const h = this.hbStart;
@@ -188,6 +211,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   private onUp(p: Phaser.Input.Pointer): void {
+    const { x, y } = this.css(p);
+    if (p.id === this.modalPointer) { this.modalPointer = -1; topModal()?.up(x, y); return; }
     if (p.id === this.joy.pointerId) { this.joy.end(); return; }
     if (p.id === this.actPointer) {
       this.actPointer = -1;
@@ -199,14 +224,13 @@ export class UIScene extends Phaser.Scene {
       const b = this.secDown;
       b.bg.setTexture(uiTex(this, 'btn', 22, 22)); b.ic.y = b.y;
       this.secPointer = -1; this.secDown = null;
-      const { x, y } = this.css(p);
-      if (Math.abs(x - b.x) <= b.r + 8 && Math.abs(y - b.y) <= b.r + 8) this.secondary(b.id);
+      if (Math.abs(x - b.x) <= b.r + 8 && Math.abs(y - b.y) <= b.r + 8) this.openMenu(b.id);
       return;
     }
     if (p.id === this.hbPointer) { this.hbPointer = -1; }
   }
 
-  private releaseAll(): void {
+  releaseAll(): void {
     if (this.joy.active) this.joy.end();
     if (this.actPointer >= 0) { this.actPointer = -1; input.actionHeld = false; input.actionReleased = true; this.actBg.setFrame('ui_btn_round'); this.actIcon.y = this.act.y; }
   }
@@ -219,13 +243,29 @@ export class UIScene extends Phaser.Scene {
     bus.emit('hotbar', i);
   }
 
-  private secondary(id: string): void {
+  openMenu(id: string): void {
+    this.releaseAll();
     switch (id) {
-      case 'inv': bus.emit('toast', 'Inventário completo chega na próxima fase!', 'info'); break;
-      case 'craft': bus.emit('toast', 'Crafting chega em breve!', 'info'); break;
-      case 'map': bus.emit('toast', `Fazenda ${G.player.farm} — explore a fazenda!`, 'info'); break;
-      case 'menu': bus.emit('toast', 'Menu de configurações em breve.', 'info'); break;
+      case 'inv': bus.emit('toast', 'O inventário completo chega na Fase 3!', 'info'); break;
+      case 'craft': bus.emit('toast', 'Crafting chega na Fase 5!', 'info'); break;
+      case 'map': bus.emit('toast', `Fazenda ${G.player.farm} — o mapa chega com a vila.`, 'info'); break;
+      case 'menu': this.menu.present(); break;
+      case 'settings': this.settingsPanel.present(); break;
     }
+  }
+
+  private toTitle(): void {
+    this.scene.stop('World');
+    this.scene.start('Title', { hasSave: true });
+  }
+
+  /** Após importar um save: recarrega o mundo. */
+  private reloadWorld(): void {
+    const w = this.scene.get('World');
+    w.scene.restart();
+    this.money.update(10);
+    this.hotbar.refresh();
+    this.clock.refresh();
   }
 
   update(_t: number, delta: number): void {
@@ -233,21 +273,20 @@ export class UIScene extends Phaser.Scene {
     const dt = Math.min(delta, 100) / 1000;
     this.money.update(dt);
     this.energy.update();
+    this.pickups.update(dt);
     if (uiState.actionIcon !== this.actIconKey) {
       this.actIconKey = uiState.actionIcon;
       this.actIcon.setFrame(this.actIconKey);
       const big = this.actIconKey.startsWith('icon_');
       this.actIcon.setScale(UI * (big ? 1.5 : 1.75));
     }
-    this.actIcon.setAlpha(uiState.actionEnabled ? 1 : 0.55);
+    this.actIcon.setAlpha(uiState.actionEnabled ? 1 : 0.5);
     if (input.actionHeld) input.actionHoldT += dt;
-    // toque longo na hotbar → inventário
     if (this.hbPointer >= 0 && !this.hbStart.moved && !this.hbStart.long && performance.now() - this.hbStart.t > 500) {
       this.hbStart.long = true;
-      this.secondary('inv');
+      this.openMenu('inv');
     }
-    // jogador parado por 10 s → 30 fps
-    perf.setIdle(!input.actionHeld && !this.joy.active && performance.now() - input.lastActive > 10000);
+    perf.setIdle(!anyModal() && !input.actionHeld && !this.joy.active && performance.now() - input.lastActive > 10000);
     const showFps = settings.showFps || this.debug.visible;
     this.fpsText.setVisible(showFps);
     if (showFps) this.fpsText.setText(`${Math.round(perf.fps)} fps`);

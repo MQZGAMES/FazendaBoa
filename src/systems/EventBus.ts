@@ -16,7 +16,12 @@ export interface GameEvents {
   target: [];
   debug: [boolean];
   float: [number, number, string, number?];
+  pickup: [string, number];
+  dialog: [DialogReq];
+  summary: [import('./DayCycle').DaySummary];
+  menu: [string];
 }
+export interface DialogReq { text: string; title?: string; buttons?: { label: string; act?: () => void }[]; icon?: string; }
 export type ToastKind = 'info' | 'good' | 'warn';
 
 class TypedBus {

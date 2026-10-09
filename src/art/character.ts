@@ -92,6 +92,7 @@ export interface Pose {
   stride: number;        // passada (lado): + perna da frente adiante
   handL: [number, number]; handR: [number, number]; // mão relativa à posição de repouso
   armsUp?: boolean;      // segurando algo acima da cabeça
+  hands?: [number, number]; // mãos juntas num ponto (ferramentas)
   head?: number;         // deslocamento extra da cabeça (respiração)
   crouch?: number;       // agachar (colher)
 }
@@ -160,7 +161,11 @@ function compose(dir: Dir, ps: Pose, style: number, extra?: (g: Grid) => void): 
   // tronco
   stamp(g, dir === 's' ? TORSO_S : TORSO_D, 15, by);
   // braços
-  if (dir !== 's') {
+  if (dir !== 's' && ps.hands) {
+    const [hx, hy] = ps.hands;
+    thickLine(g, 3, 15 + by, hx - 1, hy + by, 'a', 1); thickLine(g, 12, 15 + by, hx + 1, hy + by, 'a', 1);
+    put(g, hx - 1, hy + by, 's'); put(g, hx, hy + by, 's'); put(g, hx + 1, hy + by, 'S'); put(g, hx, hy + 1 + by, 'S');
+  } else if (dir !== 's') {
     if (ps.armsUp) {
       thickLine(g, 3, 16 + by, 2, 4 + by, 'a', 1); thickLine(g, 12, 16 + by, 13, 4 + by, 'a', 1);
       put(g, 3, 2 + by, 's'); put(g, 3, 3 + by, 's'); put(g, 12, 2 + by, 's'); put(g, 12, 3 + by, 's');
@@ -171,6 +176,12 @@ function compose(dir: Dir, ps: Pose, style: number, extra?: (g: Grid) => void): 
       thickLine(g, 12, 15 + by, 12 + rx, 18 + by + ry, 'a', 1);
       put(g, 12 + rx, 19 + by + ry, 's'); put(g, 12 + rx, 20 + by + ry, 'S');
     }
+  }
+  // braço da frente (lado) erguido fica atrás da cabeça
+  if (dir === 's' && ps.hands && ps.hands[1] < 12) {
+    const [hx, hy2] = ps.hands;
+    thickLine(g, 8, 16 + by, hx, hy2 + by, 'a', 2);
+    put(g, hx, hy2 + by, 's'); put(g, hx + 1, hy2 + by, 's');
   }
   // cabeça
   const hy = by + (ps.head ?? 0);
@@ -195,7 +206,13 @@ function compose(dir: Dir, ps: Pose, style: number, extra?: (g: Grid) => void): 
     if (style === 1) for (let y = 12; y <= 17; y++) for (let x = 3; x <= 12; x++) put(g, x, y + hy, y === 17 ? 'H' : 'h');
   }
   // braço da frente (lado) por cima
-  if (dir === 's') {
+  if (dir === 's' && ps.hands) {
+    const [hx, hy2] = ps.hands;
+    if (hy2 >= 12) {
+      thickLine(g, 8, 16 + by, hx, hy2 + by, 'a', 2);
+      put(g, hx, hy2 + by, 's'); put(g, hx + 1, hy2 + by, 's'); put(g, hx, hy2 + 1 + by, 'S');
+    }
+  } else if (dir === 's') {
     if (ps.armsUp) {
       // braço erguido fica atrás da cabeça; mãos aparecem acima dela
       put(g, 9, 2 + by, 's'); put(g, 10, 2 + by, 's'); put(g, 9, 3 + by, 'S'); put(g, 10, 3 + by, 's');
@@ -270,10 +287,22 @@ const WALK_SIDE: Pose[] = [
 ];
 const IDLE: Pose[] = [pose({}), pose({ head: 0, bob: 1, liftL: 0 })];
 
+/** Poses de ferramenta por direção (mãos onde a ferramenta é desenhada). */
+export const SWING_HANDS: Record<Dir, [number, number][]> = {
+  d: [[8, 2], [8, 13], [8, 19], [8, 18]],
+  u: [[8, 15], [8, 4], [8, 2], [8, 3]],
+  s: [[5, 3], [10, 6], [12, 17], [12, 18]],
+};
+export const WATER_HANDS: Record<Dir, [number, number][]> = { d: [[8, 18], [8, 19]], u: [[8, 15], [8, 15]], s: [[12, 16], [12, 17]] };
+export const HARVEST_HANDS: Record<Dir, [number, number][]> = { d: [[8, 20], [8, 23]], u: [[8, 16], [8, 16]], s: [[11, 20], [12, 23]] };
+
 export const PLAYER_ANIMS = {
   idle: 2,
   walk: WALK_FRAMES,
   carry: WALK_FRAMES,
+  swing: 4,
+  water: 2,
+  harvest: 2,
 } as const;
 export type PlayerAnim = keyof typeof PLAYER_ANIMS;
 
@@ -293,6 +322,9 @@ export function addPlayer(ab: AtlasBuilder, look: Appearance): void {
     const walk = d === 's' ? WALK_SIDE : WALK_FRONT;
     walk.forEach((p, i) => ab.add(playerFrame(d, 'walk', i), W, H, (pc) => pc.blit(render(compose(d, p, look.hairStyle), look), 0, 0)));
     walk.forEach((p, i) => ab.add(playerFrame(d, 'carry', i), W, H, (pc) => pc.blit(render(compose(d, { ...p, armsUp: true }, look.hairStyle), look), 0, 0)));
+    SWING_HANDS[d].forEach((h, i) => ab.add(playerFrame(d, 'swing', i), W, H, (pc) => pc.blit(render(compose(d, pose({ hands: h, bob: i >= 2 ? 1 : 0, liftL: d === 's' && i === 0 ? 1 : 0 }), look.hairStyle), look), 0, 0)));
+    WATER_HANDS[d].forEach((h, i) => ab.add(playerFrame(d, 'water', i), W, H, (pc) => pc.blit(render(compose(d, pose({ hands: h }), look.hairStyle), look), 0, 0)));
+    HARVEST_HANDS[d].forEach((h, i) => ab.add(playerFrame(d, 'harvest', i), W, H, (pc) => pc.blit(render(compose(d, pose({ hands: h, crouch: i }), look.hairStyle), look), 0, 0)));
   }
 }
 

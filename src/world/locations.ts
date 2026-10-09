@@ -1,5 +1,6 @@
 import { Location } from './Location';
 import { generateFarm } from './genFarm';
+import { generateHouse } from './genHouse';
 import { G } from '../state';
 
 /** Registro de mapas: como criar cada um do zero e dados estáticos (saídas, interior). */
@@ -7,6 +8,7 @@ interface LocDef { create: (seed: number) => Location; }
 
 export const LOCATIONS: Record<string, LocDef> = {
   farm: { create: (seed) => generateFarm(seed) },
+  house: { create: () => generateHouse() },
 };
 
 /** Retorna o mapa do estado atual, criando-o se ainda não existir. */

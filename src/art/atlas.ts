@@ -52,7 +52,10 @@ export class AtlasBuilder {
       frames.push({ n: d.name, x: p.x, y: p.y, w: d.w, h: d.h });
       if (performance.now() - t0 > budgetMs) {
         onProgress(k / this.defs.length);
+        const ty = performance.now();
         await nextFrame();
+        // aba em segundo plano (timers limitados): trabalha em blocos maiores
+        if (performance.now() - ty > 60) budgetMs = Math.max(budgetMs, 250);
         t0 = performance.now();
       }
     }

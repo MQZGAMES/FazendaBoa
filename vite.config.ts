@@ -1,5 +1,5 @@
 import { defineConfig, type Plugin } from 'vite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
 /** Gera o service worker com a lista de arquivos do build (cache offline completo). */
 function serviceWorker(): Plugin {
@@ -18,9 +18,30 @@ function serviceWorker(): Plugin {
   };
 }
 
+/** Só no dev: recebe capturas de tela do jogo (POST /__snap?name=x) e salva em .snaps/. */
+function devSnapshots(): Plugin {
+  return {
+    name: 'fb-dev-snapshots',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/__snap', (req, res) => {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          const name = (new URL(req.url ?? '', 'http://x').searchParams.get('name') ?? 'snap').replace(/[^a-z0-9_-]/gi, '');
+          const data = Buffer.concat(chunks).toString().replace(/^data:image\/\w+;base64,/, '');
+          mkdirSync('.snaps', { recursive: true });
+          writeFileSync(`.snaps/${name}.png`, Buffer.from(data, 'base64'));
+          res.end('ok');
+        });
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: './',
-  plugins: [serviceWorker()],
+  plugins: [serviceWorker(), devSnapshots()],
   server: { host: true, port: 5173 },
   preview: { port: 4173 },
   build: {

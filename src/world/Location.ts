@@ -82,19 +82,20 @@ export class Location {
     return o ? { i: a - 1, o } : null;
   }
 
-  canPlace(x: number, y: number, w: number, h: number): boolean {
+  canPlace(x: number, y: number, w: number, h: number, onWall = false): boolean {
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
       const xx = x + i, yy = y + j;
       if (!this.inb(xx, yy) || this.occ[yy * this.w + xx]) return false;
       const t = this.terrain[yy * this.w + xx];
-      if (t === T.Water || t === T.Wall || t === T.Void) return false;
+      if (t === T.Water || t === T.Void || (t === T.Wall && !onWall)) return false;
     }
     return true;
   }
 
   place(x: number, y: number, o: WObj): boolean {
-    const [w, h] = OBJ[o.k].size;
-    if (!this.canPlace(x, y, w, h)) return false;
+    const def = OBJ[o.k];
+    const [w, h] = def.size;
+    if (!this.canPlace(x, y, w, h, !!def.onWall)) return false;
     const a = this.idx(x, y);
     this.objs.set(a, o);
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {

@@ -1,4 +1,5 @@
 import type { ToolKind } from './objects';
+import { CROPS } from './crops';
 
 export type ItemCat = 'tool' | 'seed' | 'crop' | 'resource' | 'food' | 'artisan' | 'fish' | 'mineral' | 'craft' | 'animal';
 
@@ -28,13 +29,25 @@ export const ITEMS: Record<string, ItemDef> = {
   scythe: tool('scythe', 'Foice', 'Corta mato e grama alta; colhe.'),
   rod: tool('rod', 'Vara de pesca', 'Segure para lançar.'),
   bucket: tool('bucket', 'Balde', 'Para tirar leite das vacas.'),
-  seed_parsnip: { id: 'seed_parsnip', name: 'Sementes de pastinaca', cat: 'seed', price: 10, icon: 'item_seed_parsnip', desc: 'Primavera. Cresce em 4 dias.' },
-  parsnip: { id: 'parsnip', name: 'Pastinaca', cat: 'crop', price: 35, icon: 'item_parsnip', edible: 25, desc: 'Uma raiz da primavera.' },
   wood: { id: 'wood', name: 'Madeira', cat: 'resource', price: 2, icon: 'item_wood', desc: 'Material de construção.' },
   stone: { id: 'stone', name: 'Pedra', cat: 'resource', price: 2, icon: 'item_stone', desc: 'Material de construção.' },
   fiber: { id: 'fiber', name: 'Fibra', cat: 'resource', price: 1, icon: 'item_fiber', desc: 'Fibras vegetais.' },
   sap: { id: 'sap', name: 'Seiva', cat: 'resource', price: 2, icon: 'item_sap', desc: 'Líquido pegajoso das árvores.' },
+  acorn: { id: 'acorn', name: 'Bolota', cat: 'seed', price: 20, icon: 'item_acorn', desc: 'Plante na grama: vira um carvalho em 10 dias.' },
+  maple_seed: { id: 'maple_seed', name: 'Semente de bordo', cat: 'seed', price: 5, icon: 'item_maple_seed', desc: 'Plante na grama: vira um bordo em 10 dias.' },
+  pinecone: { id: 'pinecone', name: 'Pinha', cat: 'seed', price: 5, icon: 'item_pinecone', desc: 'Plante na grama: vira um pinheiro em 10 dias.' },
 };
+
+/** Sementes de árvore → tipo de árvore. */
+export const TREE_SEEDS: Record<string, number> = { acorn: 0, maple_seed: 1, pinecone: 2 };
+export const TREE_SEED_OF = ['acorn', 'maple_seed', 'pinecone'];
+
+const SEASON_TXT = ['Primavera', 'Verão', 'Outono', 'Inverno'];
+for (const c of CROPS) {
+  const seasons = c.seasons.map((x) => SEASON_TXT[x]).join('/');
+  ITEMS[c.seed] = { id: c.seed, name: c.seedName, cat: 'seed', price: Math.floor(c.seedPrice / 2), icon: `item_${c.seed}`, desc: `${seasons}. Cresce em ${c.days} dias${c.regrow ? `, rebrota a cada ${c.regrow}` : ''}.` };
+  ITEMS[c.id] = { id: c.id, name: c.name, cat: 'crop', price: c.sell, icon: `item_${c.id}`, edible: c.edible || undefined, desc: `Colheita de ${seasons.toLowerCase()}.` };
+}
 
 export function itemIcon(id: string, toolTier = 0): string {
   const d = ITEMS[id];
