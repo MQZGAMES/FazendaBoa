@@ -9,14 +9,14 @@ import type { LocationView } from './LocationView';
 import type { Player } from '../entities/Player';
 import type { Particles } from '../systems/Particles';
 import type { Drops } from './Drops';
-import { canTill, till, water, plant, harvest, cropReady, isTilled, isWet, seedFits } from '../systems/Farming';
+import { canTill, till, water, plant, harvest, cropReady, isTilled, isWet, seedFits, fertilizer } from '../systems/Farming';
+import { SHOP_OPEN, SHOP_CLOSE, SHOP_CLOSED_WEEKDAY } from '../data/shops';
 import { selected, slotOf, takeFromSlot } from '../systems/Inventory';
 import { settings } from '../systems/Settings';
 import { bus } from '../systems/EventBus';
 import { haptic } from '../systems/Haptics';
 import { addXp } from '../systems/Skills';
-import { HOUSE_DOOR, BIN_POS } from './genFarm';
-import { shippingBin, WEATHER_NAMES } from '../systems/DayCycle';
+import { WEATHER_NAMES } from '../systems/DayCycle';
 import { uiState } from '../ui/state';
 
 export interface WorldHost {
@@ -31,8 +31,8 @@ export interface WorldHost {
   sleepPrompt(): void;
 }
 
-type Kind = 'none' | 'harvest' | 'interact' | 'till' | 'water' | 'refill' | 'plant' | 'hit' | 'clear' | 'eat' | 'plantTree';
-const PRIO: Record<Kind, number> = { none: 0, eat: 0.5, till: 1, water: 1, refill: 1, plant: 1.2, hit: 1, clear: 1, plantTree: 1, interact: 2, harvest: 5 };
+type Kind = 'none' | 'harvest' | 'interact' | 'till' | 'water' | 'refill' | 'plant' | 'hit' | 'clear' | 'eat' | 'plantTree' | 'place' | 'fertilize';
+const PRIO: Record<Kind, number> = { none: 0, eat: 0.5, till: 1, water: 1, refill: 1, plant: 1.2, hit: 1, clear: 1, plantTree: 1, place: 1, fertilize: 1.3, interact: 2, harvest: 5 };
 
 interface Act { kind: Kind; tx: number; ty: number; icon: string; tool: ToolKind | null; slot: number; what: string; prio: number; }
 const mk = (): Act => ({ kind: 'none', tx: 0, ty: 0, icon: 'icon_hand', tool: null, slot: -1, what: '', prio: 0 });
@@ -97,16 +97,19 @@ export class Actions {
     const hit = L.objAt(x, y);
     if (hit) {
       const o = hit.o;
+      const odef = OBJ[o.k];
+      if (odef.door) {
+        const ax = hit.i % L.w, ay = Math.floor(hit.i / L.w);
+        if (y - ay === odef.door.dy && odef.door.dx.includes(x - ax)) this.set(a, 'interact', x, y, 'icon_door', null, -1, odef.door.act);
+        return;
+      }
       switch (o.k) {
-        case 'house': {
-          const dx = x - HOUSE_DOOR.x;
-          if (y === HOUSE_DOOR.y && dx >= 0 && dx <= 1) this.set(a, 'interact', x, y, 'icon_door', null, -1, 'door');
-          return;
-        }
         case 'bin': this.set(a, 'interact', x, y, 'icon_box', null, -1, 'bin'); return;
         case 'mailbox': this.set(a, 'interact', x, y, 'icon_talk', null, -1, 'mail'); return;
         case 'bed': this.set(a, 'interact', x, y, 'icon_bed', null, -1, 'bed'); return;
         case 'tv': this.set(a, 'interact', x, y, 'icon_talk', null, -1, 'tv'); return;
+        case 'sign': this.set(a, 'interact', x, y, 'icon_talk', null, -1, 'sign'); return;
+        case 'chest': this.set(a, 'interact', x, y, 'icon_box', null, -1, 'chest:' + hit.i); return;
       }
       if (!facing) return;
       const def = OBJ[o.k];
@@ -130,6 +133,7 @@ export class Actions {
       return;
     }
     if (isTilled(L, i)) {
+      if (s?.id === 'fertilizer' && fertilizer(L, i) === 0) { this.set(a, 'fertilize', x, y, sd!.icon, null, G.player.sel); return; }
       // plantar: semente selecionada ou (troca automática) a primeira semente que cresce agora
       if (sd?.cat === 'seed' && CROP_BY_SEED[s!.id]) { this.set(a, 'plant', x, y, sd.icon, null, G.player.sel); return; }
       if (settings.autoTool && !(sd?.cat === 'tool' && sd.tool === 'can' && !isWet(L, i))) {
@@ -145,6 +149,9 @@ export class Actions {
       const cap = CAN_CAP[G.player.tools.can] ?? 40;
       if (sl >= 0 && (G.player.water < cap || (sd?.tool === 'can'))) this.set(a, 'refill', x, y, this.toolIcon('can'), 'can', sl);
       return;
+    }
+    if (sd?.place && (t === T.Grass || t === T.Dirt || t === T.Floor) && !L.occ[i] && !L.crops.has(i)) {
+      this.set(a, 'place', x, y, sd.icon, null, G.player.sel); return;
     }
     if (sd && TREE_SEEDS[s!.id] !== undefined && (t === T.Grass || t === T.Dirt) && L.outdoor && !L.occ[i]) {
       this.set(a, 'plantTree', x, y, sd.icon, null, G.player.sel); return;
@@ -171,6 +178,8 @@ export class Actions {
       case 'plant': return this.doPlant(a.tx, a.ty, a.slot);
       case 'plantTree': return this.doPlantTree(a.tx, a.ty, a.slot);
       case 'eat': return this.doEat(a.slot);
+      case 'place': return this.doPlace(a.tx, a.ty, a.slot);
+      case 'fertilize': return this.doFertilize(a.tx, a.ty, a.slot);
       default: return this.doTool(a);
     }
   }
@@ -378,6 +387,29 @@ export class Actions {
     }
   }
 
+  private doPlace(x: number, y: number, slot: number): void {
+    const st = G.player.inv[slot];
+    const kind = st ? ITEMS[st.id]?.place : undefined;
+    if (!st || !kind) return;
+    const o: WObj = kind === 'chest' ? { k: 'chest', v: 0, inv: new Array(36).fill(null) } : { k: kind, v: 0 };
+    if (this.h.loc.place(x, y, o)) {
+      takeFromSlot(slot, 1);
+      this.h.view.refreshObj(this.h.loc.idx(x, y));
+      const [cx, cy] = this.center(x, y);
+      this.h.parts.burst('chip_dirt', cx, cy + 4, 5, { up: 30, speed: 14 });
+      haptic.tap();
+    }
+  }
+
+  private doFertilize(x: number, y: number, slot: number): void {
+    const L = this.h.loc, i = L.idx(x, y);
+    L.soil[i] = (L.soil[i] & ~0b1100) | (1 << 2);
+    takeFromSlot(slot, 1);
+    const [cx, cy] = this.center(x, y);
+    this.h.parts.burst('chip_dirt', cx, cy, 6, { up: 35, speed: 16, tint: 0xe0c070 });
+    bus.emit('toast', 'Solo fertilizado: colheitas de melhor qualidade!', 'good');
+  }
+
   private doEat(slot: number): void {
     const st = G.player.inv[slot];
     if (!st) return;
@@ -399,8 +431,12 @@ export class Actions {
 
   private doInteract(what: string, x: number, y: number): void {
     void x; void y;
+    if (what.startsWith('chest:')) { bus.emit('menu', what); return; }
     switch (what) {
-      case 'door': this.h.goTo('house', 6 * 16, 8 * 16 + 12, 1); return;
+      case 'door':
+        if (this.h.loc.id === 'farm') this.h.goTo('house', 6 * 16, 8 * 16 + 12, 1);
+        else bus.emit('dialog', { title: 'Casa', icon: 'icon_door', text: 'Ninguém atende. Os moradores devem estar fora.' });
+        return;
       case 'bed': this.h.sleepPrompt(); return;
       case 'mail': bus.emit('toast', 'Nenhuma carta hoje.', 'info'); return;
       case 'tv': {
@@ -408,27 +444,18 @@ export class Actions {
         bus.emit('dialog', { title: 'Previsão do tempo', icon: `wx_${w}`, text: `Amanhã: ${WEATHER_NAMES[w]}.\n${w === 'rain' || w === 'storm' ? 'A chuva vai regar suas plantações!' : 'Não esqueça de regar as plantações.'}` });
         return;
       }
-      case 'bin': return this.ship();
+      case 'bin': bus.emit('menu', 'ship'); return;
+      case 'shop': {
+        const m = G.time.min, wd = (G.time.day - 1) % 7;
+        if (wd === SHOP_CLOSED_WEEKDAY) bus.emit('dialog', { title: 'Loja', icon: 'icon_door', text: 'Fechado às quartas-feiras.\nVolte amanhã!' });
+        else if (m < SHOP_OPEN || m >= SHOP_CLOSE) bus.emit('dialog', { title: 'Loja', icon: 'icon_door', text: 'A loja abre das 9:00 às 17:00.' });
+        else bus.emit('menu', 'shop');
+        return;
+      }
+      case 'smith': bus.emit('dialog', { title: 'Ferreiro', icon: 'tool_pickaxe_1', text: 'O ferreiro está acendendo a forja.\nTraga barras de metal quando a mina abrir para melhorar suas ferramentas.' }); return;
+      case 'manor': bus.emit('dialog', { title: 'Casarão da Vila', icon: 'icon_door', text: 'Um casarão abandonado, cheio de poeira e trepadeiras.\nDizem que quem o restaurar trará a vila de volta à vida...' }); return;
+      case 'sign': bus.emit('dialog', { title: 'Placa', text: 'Bem-vindo à Vila!\nLoja: 9h–17h (fecha às quartas)\nFerreiro e Casarão na praça.' }); return;
     }
-  }
-
-  /** Caixa de envio: coloca a pilha selecionada para vender ao amanhecer. */
-  private ship(): void {
-    const st = selected();
-    if (!st || ITEMS[st.id]?.cat === 'tool') {
-      const bin = shippingBin();
-      const n = bin.reduce((s, b) => s + b.q, 0);
-      bus.emit('toast', n ? `Caixa de envio: ${n} itens para vender amanhã.` : 'Selecione um item na hotbar para vender.', 'info');
-      return;
-    }
-    const d = ITEMS[st.id];
-    if (!d || d.price <= 0) { bus.emit('toast', 'Isso não pode ser vendido.', 'warn'); return; }
-    shippingBin().push({ id: st.id, q: st.q, ql: st.ql });
-    G.player.inv[G.player.sel] = null;
-    bus.emit('inventory');
-    bus.emit('toast', `${st.q}x ${d.name} na caixa de envio.`, 'good');
-    this.h.view.flashBin(BIN_POS.x, BIN_POS.y);
-    haptic.tap();
   }
 
   /** Toque direto no mundo: interage com o tile tocado se estiver perto. */

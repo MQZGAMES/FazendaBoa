@@ -1,7 +1,7 @@
 import { OBJ, type WObj } from '../data/objects';
 
 /** Tipos de terreno base. */
-export enum T { Grass = 0, Dirt = 1, Water = 2, Floor = 3, Wall = 4, Void = 5 }
+export enum T { Grass = 0, Dirt = 1, Water = 2, Floor = 3, Wall = 4, Void = 5, Stone = 6 }
 
 /** Plantação num tile arado. */
 export interface Crop { id: string; age: number; stage: number; regrow?: number; dead?: 1; ql?: number; }

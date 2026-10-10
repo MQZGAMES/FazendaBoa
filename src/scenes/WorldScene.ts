@@ -7,8 +7,11 @@ import { G, DAY_START } from '../state';
 import { TILE, MAX_DT } from '../config';
 import { Player } from '../entities/Player';
 import { LocationView } from '../world/LocationView';
-import { getLocation } from '../world/locations';
-import { FARM_SPAWN, HOUSE_DOOR } from '../world/genFarm';
+import { getLocation, LOCATIONS } from '../world/locations';
+
+/** Portas que abrem ao empurrar. */
+const OBJ_DOOR_ACTS = new Set(['door', 'shop', 'smith', 'manor']);
+import { FARM_SPAWN } from '../world/genFarm';
 import { HOUSE_WAKE } from '../world/genHouse';
 import type { Location } from '../world/Location';
 import { uiState } from '../ui/state';
@@ -282,14 +285,17 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     this.exitCooldown -= dt;
     if (this.transitioning) return;
     const p = this.player;
-    // empurrar a porta da casa também entra
-    if (this.loc.id === 'farm' && p.dir === 1 && input.my < -0.3 && p.ty === HOUSE_DOOR.y + 1 && (p.tx === HOUSE_DOOR.x || p.tx === HOUSE_DOOR.x + 1)) {
-      this.doorPush += dt;
-      if (this.doorPush > 0.25) { this.doorPush = 0; this.goTo('house', 6 * 16, 8 * 16 + 12, 1); return; }
+    // empurrar uma porta (andando em direção a ela) também entra
+    if (p.dir === 1 && input.my < -0.3 && !p.busy) {
+      const a = this.actions.evaluate();
+      if (a.kind === 'interact' && OBJ_DOOR_ACTS.has(a.what)) {
+        this.doorPush += dt;
+        if (this.doorPush > 0.25) { this.doorPush = 0; this.actions.run(false); return; }
+      } else this.doorPush = 0;
     } else this.doorPush = 0;
     const e = this.loc.exitAt(p.tx, p.ty);
     if (!e || this.exitCooldown > 0) return;
-    if (e.to === 'farm' || e.to === 'house') { this.goTo(e.to, e.tx, e.ty, e.to === 'farm' ? 0 : 1); return; }
+    if (LOCATIONS[e.to]) { this.goTo(e.to, e.tx, e.ty, p.dir); return; }
     this.exitCooldown = 2.5;
     bus.emit('toast', `${e.label}: caminho ainda em obras!`, 'warn');
   }

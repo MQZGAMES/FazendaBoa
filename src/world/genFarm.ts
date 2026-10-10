@@ -18,7 +18,7 @@ export function applyIslandBorder(L: Location): void {
     const edge = Math.min(x, y, L.w - 1 - x, L.h - 1 - y);
     if (edge >= ISLAND_SEA) continue;
     const i = L.idx(x, y);
-    if (L.terrain[i] === T.Dirt) continue;
+    if (L.terrain[i] === T.Dirt || L.terrain[i] === T.Stone) continue;
     const hit = L.objAt(x, y);
     if (hit) L.remove(hit.i);
     L.crops.delete(i);
@@ -82,7 +82,7 @@ export function generateFarm(seed: number): Location {
   L.place(35, 10, { k: 'mailbox', v: 0 });
 
   // Saídas
-  L.exits.push({ x: 37, y: H - 1, w: 5, h: 1, to: 'town', tx: 0, ty: 0, label: 'Vila' });
+  L.exits.push({ x: 37, y: H - 1, w: 5, h: 1, to: 'town', tx: 24 * 16 + 8, ty: 3 * 16 + 13, label: 'Vila' });
   L.exits.push({ x: 0, y: 29, w: 1, h: 5, to: 'forest', tx: 0, ty: 0, label: 'Floresta' });
   L.exits.push({ x: 22, y: 0, w: 5, h: 1, to: 'mine', tx: 0, ty: 0, label: 'Mina' });
 

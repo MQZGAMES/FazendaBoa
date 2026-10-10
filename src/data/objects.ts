@@ -2,9 +2,12 @@
 export type ObjKind =
   | 'weed' | 'stone' | 'twig' | 'stump' | 'tree' | 'sapling' | 'boulder' | 'tallgrass' | 'flowers' | 'bush'
   | 'house' | 'bin' | 'fence' | 'mailbox' | 'ore'
-  | 'bed' | 'tv' | 'table' | 'chair' | 'rug' | 'fireplace' | 'window' | 'plant' | 'lamp' | 'shelf';
+  | 'bed' | 'tv' | 'table' | 'chair' | 'rug' | 'fireplace' | 'window' | 'plant' | 'lamp' | 'shelf'
+  | 'shop' | 'smith' | 'manor' | 'fountain' | 'bench' | 'lamppost' | 'flowerbed' | 'sign' | 'chest';
 
 export type ToolKind = 'hoe' | 'can' | 'axe' | 'pickaxe' | 'scythe' | 'rod' | 'bucket';
+
+import type { ItemStack } from '../state';
 
 /** Instância salva de um objeto (âncora = tile superior-esquerdo da base). */
 export interface WObj {
@@ -15,6 +18,7 @@ export interface WObj {
   g?: number;       // estágio de crescimento
   s?: 1;            // árvore virou toco
   a?: number;       // idade em dias (mudas)
+  inv?: (ItemStack | null)[]; // conteúdo (baús)
 }
 
 export interface ObjDef {
@@ -32,6 +36,10 @@ export interface ObjDef {
   flat?: boolean;
   /** pode ficar sobre parede (janelas, quadros) */
   onWall?: boolean;
+  /** porta: colunas (relativas à âncora) e linha da base onde fica, e o que abre */
+  door?: { dx: number[]; dy: number; act: string };
+  /** item que vira ao ser recolhido */
+  item?: string;
 }
 
 export const OBJ: Record<ObjKind, ObjDef> = {
@@ -45,7 +53,7 @@ export const OBJ: Record<ObjKind, ObjDef> = {
   tallgrass: { name: 'Grama alta', solid: false, size: [1, 1], sway: true, tool: 'scythe', hp: 1 },
   flowers: { name: 'Flores', solid: false, size: [1, 1], sway: true, flat: true },
   bush: { name: 'Arbusto', solid: true, size: [2, 1], shadow: 'shadow_l' },
-  house: { name: 'Casa', solid: true, size: [6, 3] },
+  house: { name: 'Casa', solid: true, size: [6, 3], door: { dx: [2, 3], dy: 2, act: 'door' } },
   bin: { name: 'Caixa de envio', solid: true, size: [2, 1] },
   fence: { name: 'Cerca', solid: true, size: [1, 1] },
   mailbox: { name: 'Caixa de correio', solid: true, size: [1, 1] },
@@ -60,6 +68,15 @@ export const OBJ: Record<ObjKind, ObjDef> = {
   plant: { name: 'Vaso', solid: true, size: [1, 1] },
   lamp: { name: 'Luminária', solid: true, size: [1, 1] },
   shelf: { name: 'Estante', solid: true, size: [1, 1] },
+  shop: { name: 'Loja', solid: true, size: [7, 3], door: { dx: [3, 4], dy: 2, act: 'shop' } },
+  smith: { name: 'Ferreiro', solid: true, size: [6, 3], door: { dx: [3, 4], dy: 2, act: 'smith' } },
+  manor: { name: 'Casarão', solid: true, size: [11, 4], door: { dx: [5], dy: 3, act: 'manor' } },
+  fountain: { name: 'Fonte', solid: true, size: [3, 2] },
+  bench: { name: 'Banco', solid: true, size: [2, 1] },
+  lamppost: { name: 'Poste', solid: true, size: [1, 1] },
+  flowerbed: { name: 'Canteiro', solid: true, size: [1, 1] },
+  sign: { name: 'Placa', solid: true, size: [1, 1] },
+  chest: { name: 'Baú', solid: true, size: [1, 1], item: 'chest' },
 };
 
 /** Tempo de crescimento das mudas de árvore (dias). */

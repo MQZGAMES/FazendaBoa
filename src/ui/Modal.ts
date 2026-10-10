@@ -58,6 +58,7 @@ export class Modal {
   protected button(x: number, y: number, w: number, h: number, label: string, act: () => void, kind: PanelKind = 'btn', font: 'dark' | 'light' = 'dark'): MBtn {
     const bg = this.scene.add.image(Math.round(x), Math.round(y), uiTex(this.scene, kind, Math.round(w / UI), Math.round(h / UI))).setOrigin(0, 0).setScale(UI);
     const t = txt(this.scene, x + w / 2, y + h / 2 - 8, label, font).setOrigin(0.5, 0);
+    if (t.width > w - 12) { t.setScale(1.5); t.y = y + h / 2 - 6; }
     this.c.add([bg, t]);
     const b: MBtn = { x, y, w, h, act, bg, kind, label: t };
     this.btns.push(b);

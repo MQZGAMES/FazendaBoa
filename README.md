@@ -13,7 +13,13 @@ jogo original). Sem áudio nesta versão.
 - **Desktop:** WASD/setas (Shift anda devagar), E ou Espaço = ação, 1–8 = hotbar.
 - **Fazenda:** a ação escolhe a ferramenta certa sozinha (arar → plantar → regar → colher). Segure o botão
   e ande para regar/arar uma fileira inteira. Encha o regador na água. Durma na cama (dentro de casa).
-- **Vender:** selecione um item e use a caixa de envio ao lado da casa — o dinheiro chega ao amanhecer.
+- **Vender:** use a caixa de envio ao lado da casa e toque nos itens — o dinheiro chega ao amanhecer.
+- **Vila:** siga a estrada ao sul da fazenda. A loja (9h–17h, fecha às quartas) vende sementes da estação,
+  fertilizante, mudas e ampliações da mochila. O ferreiro e o casarão em ruínas ganham função nas próximas fases.
+- **Mochila e baús:** botão da bolsa (ou toque longo na hotbar). Arraste ou toque-e-toque para trocar itens.
+  Fabrique baús (50 madeira) no martelo, coloque no chão e use "Guardar iguais".
+- **Ilha:** as bordas da fazenda e da vila são mar. Solo arado ao lado da água fica sempre úmido.
+- **Energia:** ao zerar, você ainda age, mas desmaia em 5 minutos (cronômetro no topo) — coma algo ou durma.
 - **Save:** automático ao dormir e ao sair. Menu (engrenagem) → Exportar/Importar save (código ou .json).
 - **Debug:** toque 5 vezes no relógio (no dev ou com `?debug` na URL).
 
@@ -23,7 +29,7 @@ Dica: no iPhone, use *Compartilhar → Adicionar à Tela de Início* para tela c
 - [x] Fase 0 — Arquitetura e plano técnico ([docs/PLANO_TECNICO.md](docs/PLANO_TECNICO.md))
 - [x] Fase 1 — Fazenda com autotiling, personagem animado, joystick, câmera, colisão, HUD, desempenho e debug
 - [x] Fase 2 — Agricultura, tempo, energia, dormir, save/exportar/importar
-- [ ] Fase 3 — Caixa de envio, loja, inventário, mochila, baús
+- [x] Fase 3 — Vila, loja, caixa de envio, mochila (12→24→36), baús e fabricação básica
 - [ ] Fase 4 — Árvores, mina, fornalha, carregar pedras
 - [ ] Fase 5 — Crafting
 - [ ] Fase 6 — Galinhas, vacas e construções

@@ -41,7 +41,9 @@ export function objFrame(o: WObj, season: number): string {
     case 'tallgrass': return `tallgrass_${season}_${o.v}`;
     case 'flowers': return `flowers_${o.v}`;
     case 'bush': return `bush_${season}`;
-    case 'house': return 'house';
+    case 'house': return o.v === 1 ? 'house_b' : o.v === 2 ? 'house_g' : 'house';
+    case 'manor': return `manor_${Math.min(6, o.g ?? 0)}`;
+    case 'flowerbed': return `flowerbed_${o.v % 3}`;
     case 'bin': return 'bin';
     case 'fence': return `fence_${o.v}`;
     case 'mailbox': return 'mailbox';
@@ -51,7 +53,7 @@ export function objFrame(o: WObj, season: number): string {
 }
 
 /** Ajuste vertical (px) do sprite em relação à base do tile. */
-const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1, bed: 1, tv: 1, table: 2, chair: 1, plant: 1, lamp: 1, shelf: 1, fireplace: 0, window: -2 };
+const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1, bed: 1, tv: 1, table: 2, chair: 1, plant: 1, lamp: 1, shelf: 1, fireplace: 0, window: -2, shop: 0, smith: 0, manor: 0, fountain: 2, bench: 1, lamppost: 1, chest: 1, sign: 1 };
 
 /**
  * Renderização de um mapa: tilemap com autotiling, água animada e objetos
@@ -123,6 +125,7 @@ export class LocationView {
     switch (t) {
       case T.Grass: return TERRAIN.grass[s][grassVariant(x, y)];
       case T.Dirt: return TERRAIN.dirt[s] + MASK_TO_AUTO[this.mask(x, y, T.Dirt)];
+      case T.Stone: return TERRAIN.stone[s] + MASK_TO_AUTO[this.mask(x, y, T.Stone)];
       case T.Water: {
         const m = this.mask(x, y, T.Water);
         return m === 255 ? -1 : TERRAIN.water[s] + MASK_TO_AUTO[m];
@@ -269,6 +272,12 @@ export class LocationView {
     }
     this.lastRect.rev = -1;
     this.rebuildReady();
+  }
+
+  /** Tampa do baú aberta enquanto o painel está aberto. */
+  setChestOpen(anchor: number, open: boolean): void {
+    const os = this.active.get(anchor);
+    if (os) os.spr.setFrame(open ? 'chest_open' : 'chest');
   }
 
   /** Abre a tampa da caixa de envio por um instante. */

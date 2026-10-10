@@ -1,4 +1,4 @@
-import type { ToolKind } from './objects';
+import type { ToolKind, ObjKind } from './objects';
 import { CROPS } from './crops';
 
 export type ItemCat = 'tool' | 'seed' | 'crop' | 'resource' | 'food' | 'artisan' | 'fish' | 'mineral' | 'craft' | 'animal';
@@ -15,6 +15,8 @@ export interface ItemDef {
   edible?: number;
   tool?: ToolKind;
   desc?: string;
+  /** objeto colocado no mundo ao usar */
+  place?: ObjKind;
 }
 
 export const MAX_STACK = 999;
@@ -36,6 +38,9 @@ export const ITEMS: Record<string, ItemDef> = {
   acorn: { id: 'acorn', name: 'Bolota', cat: 'seed', price: 20, icon: 'item_acorn', desc: 'Plante na grama: vira um carvalho em 10 dias.' },
   maple_seed: { id: 'maple_seed', name: 'Semente de bordo', cat: 'seed', price: 5, icon: 'item_maple_seed', desc: 'Plante na grama: vira um bordo em 10 dias.' },
   pinecone: { id: 'pinecone', name: 'Pinha', cat: 'seed', price: 5, icon: 'item_pinecone', desc: 'Plante na grama: vira um pinheiro em 10 dias.' },
+  fertilizer: { id: 'fertilizer', name: 'Fertilizante básico', cat: 'craft', price: 2, icon: 'item_fertilizer', desc: 'Use no solo arado antes de plantar: melhora a qualidade da colheita.' },
+  chest: { id: 'chest', name: 'Baú', cat: 'craft', price: 0, icon: 'item_chest', place: 'chest', desc: 'Coloque no chão para guardar 36 itens.' },
+  backpack: { id: 'backpack', name: 'Mochila', cat: 'craft', price: 0, icon: 'item_backpack' },
 };
 
 /** Sementes de árvore → tipo de árvore. */

@@ -120,6 +120,29 @@ const dirtStyle = (g: GrassPal, season: number): Styler => (d, x, y, dir, jit) =
   return dirtInterior(x, y, 31, season === 3);
 };
 
+/** Paralelepípedos: pedras arredondadas desencontradas com rejunte. */
+function cobble(x: number, y: number, winter: boolean): Color {
+  const row = Math.floor(y / 4);
+  const off = (row % 2) * 3;
+  const cx = Math.floor((x + off) / 6);
+  const lx = (x + off) % 6, ly = y % 4;
+  if (lx === 0 || ly === 0) return winter ? rgb('#8a8a9a') : P.stone1;
+  const h = hash2(cx, row, 61);
+  let c = h < 0.33 ? P.stone2 : h < 0.66 ? rgb('#9a9088') : rgb('#8e8a8e');
+  if (lx === 1 || ly === 1) c = mix(c, P.stone4, 0.45);
+  else if (lx === 5 || ly === 3) c = mix(c, P.stone0, 0.25);
+  if (winter && hash2(x, y, 62) < 0.22) c = mix(c, rgb('#eef2fa'), 0.7);
+  return c;
+}
+
+const stoneStyle = (g: GrassPal, season: number): Styler => (d, x, y, dir, jit) => {
+  const fringe = 1 + jit;
+  if (d <= fringe - 1) return grassPixel(g, x, y, 7);
+  if (d === fringe) return g.g0;
+  if (d === fringe + 1) return dir === 0 || dir === 2 ? P.stone0 : P.stone1;
+  return cobble(x, y, season === 3);
+};
+
 const WSHADOW = withAlpha(rgb('#0c2348'), 120);
 const WSHADOW2 = withAlpha(rgb('#0c2348'), 60);
 const FOAM = withAlpha(P.foam, 190);
@@ -248,6 +271,7 @@ export interface TerrainIndex {
   /** base do conjunto de 47 por estação */
   dirt: number[];
   water: number[];
+  stone: number[];
   soil: number;
   soilWet: number;
   floor: number[];
@@ -264,7 +288,7 @@ export interface TerrainBuild { canvas: HTMLCanvasElement; index: TerrainIndex; 
 export function buildTerrain(): TerrainBuild {
   const tiles: PixelCanvas[] = [];
   const push = (pc: PixelCanvas) => { tiles.push(pc); return tiles.length - 1; };
-  const index: TerrainIndex = { grass: [], dirt: [], water: [], soil: 0, soilWet: 0, floor: [], wallTop: 0, wallMid: 0, wallBase: 0, black: 0 };
+  const index: TerrainIndex = { grass: [], dirt: [], water: [], stone: [], soil: 0, soilWet: 0, floor: [], wallTop: 0, wallMid: 0, wallBase: 0, black: 0 };
   for (let s = 0; s < 4; s++) {
     const g = GRASS[s];
     index.grass.push([]);
@@ -273,6 +297,8 @@ export function buildTerrain(): TerrainBuild {
     for (const m of AUTO_MASKS) push(autoTile(m, 4, dirtStyle(g, s)));
     index.water.push(tiles.length);
     for (const m of AUTO_MASKS) push(autoTile(m, 5, waterStyle(g, s)));
+    index.stone.push(tiles.length);
+    for (const m of AUTO_MASKS) push(autoTile(m, 3, stoneStyle(g, s)));
   }
   index.soil = tiles.length;
   for (const m of AUTO_MASKS) push(autoTile(m, 3, soilStyle(false)));

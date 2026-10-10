@@ -4,7 +4,7 @@ import { hash2 } from './rng';
 import type { AtlasBuilder } from './atlas';
 
 /** Telhado de telhas em fileiras desencontradas, luz vindo do alto-esquerda. */
-function shingleRoof(pc: PixelCanvas, x0: number, y0: number, w: number, h: number, inset: number, cols: [Color, Color, Color, Color]): void {
+export function shingleRoof(pc: PixelCanvas, x0: number, y0: number, w: number, h: number, inset: number, cols: [Color, Color, Color, Color]): void {
   for (let j = 0; j < h; j++) {
     const t = j / h;
     const ins = Math.round(inset * (1 - t));
@@ -25,7 +25,7 @@ function shingleRoof(pc: PixelCanvas, x0: number, y0: number, w: number, h: numb
   }
 }
 
-function planks(pc: PixelCanvas, x0: number, y0: number, w: number, h: number, base: [Color, Color, Color, Color]): void {
+export function planks(pc: PixelCanvas, x0: number, y0: number, w: number, h: number, base: [Color, Color, Color, Color]): void {
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
     const x = x0 + i, y = y0 + j;
     let c = base[2];
@@ -37,7 +37,7 @@ function planks(pc: PixelCanvas, x0: number, y0: number, w: number, h: number, b
   }
 }
 
-function windowAt(pc: PixelCanvas, x: number, y: number, w: number, h: number, flowers: boolean): void {
+export function windowAt(pc: PixelCanvas, x: number, y: number, w: number, h: number, flowers: boolean): void {
   pc.rect(x - 1, y - 1, w + 2, h + 2, P.wood0);
   pc.rect(x, y, w, h, P.wood3);
   pc.rect(x + 1, y + 1, w - 2, h - 2, P.glass1);
@@ -56,7 +56,7 @@ function windowAt(pc: PixelCanvas, x: number, y: number, w: number, h: number, f
   }
 }
 
-function stoneBase(pc: PixelCanvas, x0: number, y0: number, w: number, h: number): void {
+export function stoneBase(pc: PixelCanvas, x0: number, y0: number, w: number, h: number): void {
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
     const row = Math.floor(j / 3), off = (row % 2) * 4;
     let c = P.stone2;
@@ -68,7 +68,7 @@ function stoneBase(pc: PixelCanvas, x0: number, y0: number, w: number, h: number
 }
 
 /** Casa da fazenda (96x96): 6 tiles de largura. */
-function drawHouse(pc: PixelCanvas): void {
+export function drawHouse(pc: PixelCanvas, roofCols: [Color, Color, Color, Color] = [P.roof0, P.roof1, P.roof2, P.roof3]): void {
   const W = 96;
   // parede
   planks(pc, 8, 46, 80, 40, [P.wall0, P.wall1, P.wall2, P.wall3]);
@@ -81,11 +81,11 @@ function drawHouse(pc: PixelCanvas): void {
   stoneBase(pc, 66, 2, 10, 20);
   pc.rect(65, 1, 12, 3, P.stone3); pc.hline(65, 76, 1, P.stone4);
   // telhado
-  const roof: [Color, Color, Color, Color] = [P.roof0, P.roof1, P.roof2, P.roof3];
+  const roof = roofCols;
   shingleRoof(pc, 0, 12, W, 36, 12, roof);
   // cumeeira e beiral
-  pc.hline(12, W - 13, 12, mix(P.roof3, P.white, 0.25));
-  pc.rect(0, 47, W, 2, P.roof0); pc.hline(0, W - 1, 46, P.roof1);
+  pc.hline(12, W - 13, 12, mix(roof[3], P.white, 0.25));
+  pc.rect(0, 47, W, 2, roof[0]); pc.hline(0, W - 1, 46, roof[1]);
   // porta
   const dx = 40;
   pc.rect(dx - 2, 58, 20, 28, P.wood0);
@@ -147,7 +147,9 @@ function drawMailbox(pc: PixelCanvas): void {
 }
 
 export function addBuildings(ab: AtlasBuilder): void {
-  ab.add('house', 96, 96, drawHouse);
+  ab.add('house', 96, 96, (pc) => drawHouse(pc));
+  ab.add('house_b', 96, 96, (pc) => drawHouse(pc, [rgb('#1c2a5a'), rgb('#2a4488'), rgb('#3a62b0'), rgb('#5a88d0')]));
+  ab.add('house_g', 96, 96, (pc) => drawHouse(pc, [rgb('#1c3a24'), rgb('#2a5a34'), rgb('#3a7a44'), rgb('#5aa060')]));
   ab.add('house_glow', 96, 96, drawHouseGlow);
   ab.add('bin', 32, 26, (pc) => drawBin(pc, false));
   ab.add('bin_open', 32, 26, (pc) => drawBin(pc, true));

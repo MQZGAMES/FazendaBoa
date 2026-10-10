@@ -18,6 +18,7 @@ import { Dialog, Summary, Pickups } from '../ui/Dialogs';
 import { GameMenu, SettingsPanel } from '../ui/Menus';
 import { topModal, anyModal } from '../ui/Modal';
 import { InventoryPanel } from '../ui/InventoryPanel';
+import { ShipPanel, ChestPanel, ShopPanel, CraftPanel } from '../ui/Panels';
 
 interface SecBtn { id: string; icon: string; bg: Phaser.GameObjects.Image; ic: Phaser.GameObjects.Image; x: number; y: number; r: number; visible: boolean; }
 
@@ -35,6 +36,10 @@ export class UIScene extends Phaser.Scene {
   private menu!: GameMenu;
   private settingsPanel!: SettingsPanel;
   private inventory!: InventoryPanel;
+  private ship!: ShipPanel;
+  private chest!: ChestPanel;
+  private shop!: ShopPanel;
+  private craft!: CraftPanel;
   private pickups!: Pickups;
   private actBg!: Phaser.GameObjects.Image;
   private actIcon!: Phaser.GameObjects.Image;
@@ -70,6 +75,10 @@ export class UIScene extends Phaser.Scene {
     this.dialog = new Dialog(this);
     this.summary = new Summary(this);
     this.inventory = new InventoryPanel(this);
+    this.ship = new ShipPanel(this);
+    this.chest = new ChestPanel(this);
+    this.shop = new ShopPanel(this);
+    this.craft = new CraftPanel(this);
     this.settingsPanel = new SettingsPanel(this, () => { this.joy.applySize(); this.layout(); });
     this.menu = new GameMenu(this, () => this.settingsPanel.present(), () => this.toTitle(), () => this.reloadWorld());
     this.actBg = this.add.image(0, 0, 'atlas', 'ui_btn_round').setScale(UI).setDepth(10);
@@ -256,9 +265,21 @@ export class UIScene extends Phaser.Scene {
 
   openMenu(id: string): void {
     this.releaseAll();
+    if (id.startsWith('chest:')) {
+      const w = this.scene.get('World') as unknown as { loc: import('../world/Location').Location; view: import('../world/LocationView').LocationView };
+      const anchor = Number(id.slice(6));
+      const obj = w.loc.objs.get(anchor);
+      if (!obj) return;
+      w.view.setChestOpen(anchor, true);
+      this.chest.onClose = () => w.view.setChestOpen(anchor, false);
+      this.chest.present(obj, () => { w.loc.remove(anchor); w.view.refreshObj(anchor); });
+      return;
+    }
     switch (id) {
       case 'inv': this.inventory.present(); break;
-      case 'craft': bus.emit('toast', 'Crafting chega na Fase 5!', 'info'); break;
+      case 'craft': this.craft.present(); break;
+      case 'ship': this.ship.present(); break;
+      case 'shop': this.shop.present(); break;
       case 'map': bus.emit('toast', `Fazenda ${G.player.farm} — o mapa chega com a vila.`, 'info'); break;
       case 'menu': this.menu.present(); break;
       case 'settings': this.settingsPanel.present(); break;
@@ -285,6 +306,8 @@ export class UIScene extends Phaser.Scene {
     this.money.update(dt);
     this.energy.update();
     this.pickups.update(dt);
+    this.shop.update();
+    this.craft.update();
     if (uiState.actionIcon !== this.actIconKey) {
       this.actIconKey = uiState.actionIcon;
       this.actIcon.setFrame(this.actIconKey);

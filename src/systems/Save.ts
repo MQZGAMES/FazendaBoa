@@ -1,6 +1,6 @@
 import { G, setGame, newGameState, type GameState } from '../state';
 import { Location, type Crop } from '../world/Location';
-import { staticTemplate } from '../world/locations';
+import { staticTemplate, LOCATIONS } from '../world/locations';
 import { applyIslandBorder } from '../world/genFarm';
 import { idbGet, idbSet } from './idb';
 import type { WObj } from '../data/objects';
@@ -77,6 +77,8 @@ export function deserialize(s: SaveFile): GameState {
   st.weather = { ...st.weather, ...s.weather };
   st.flags = { ...s.flags };
   for (const ls of s.locs) {
+    const ver = LOCATIONS[ls.id]?.version;
+    if (ver && (ls.extra?.ver ?? 0) !== ver) continue; // layout mudou: será recriado
     const tpl = staticTemplate(ls.id, s.seed);
     const L = new Location(ls.id, ls.w, ls.h);
     L.exits = tpl.exits;
