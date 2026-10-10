@@ -12,6 +12,7 @@ import type { Drops } from './Drops';
 import { canTill, till, water, plant, harvest, cropReady, isTilled, isWet, seedFits, fertilizer } from '../systems/Farming';
 import { SHOP_OPEN, SHOP_CLOSE, SHOP_CLOSED_WEEKDAY } from '../data/shops';
 import { MINE_ROCKS, PICK_POWER, LADDER_BASE, LADDER_STEP, MINE_FLOORS, ROCKPILE_STONE, SMELT } from '../data/mine';
+import { SPRINKLER_AREA, SPRINKLER_ITEMS, SCARECROW_RADIUS, WHEELBARROW_CAP } from '../data/objects';
 import { machineReady, smeltableOre, loadFurnace, minutesLeft } from '../systems/Machines';
 import { addItem } from '../systems/Inventory';
 import { selected, slotOf, takeFromSlot } from '../systems/Inventory';
@@ -34,8 +35,8 @@ export interface WorldHost {
   sleepPrompt(): void;
 }
 
-type Kind = 'none' | 'harvest' | 'interact' | 'till' | 'water' | 'refill' | 'plant' | 'hit' | 'clear' | 'eat' | 'plantTree' | 'place' | 'fertilize' | 'collect' | 'load' | 'lift' | 'drop' | 'stack';
-const PRIO: Record<Kind, number> = { none: 0, eat: 0.5, till: 1, water: 1, refill: 1, plant: 1.2, hit: 1, clear: 1, plantTree: 1, place: 1, fertilize: 1.3, interact: 2, load: 2, lift: 2, drop: 2, stack: 2, collect: 3, harvest: 5 };
+type Kind = 'none' | 'harvest' | 'interact' | 'till' | 'water' | 'refill' | 'plant' | 'hit' | 'clear' | 'eat' | 'plantTree' | 'place' | 'fertilize' | 'collect' | 'load' | 'lift' | 'drop' | 'stack' | 'path' | 'unpath' | 'empty';
+const PRIO: Record<Kind, number> = { none: 0, eat: 0.5, till: 1, water: 1, refill: 1, plant: 1.2, hit: 1, clear: 1, plantTree: 1, place: 1, fertilize: 1.3, interact: 2, load: 2, lift: 2, drop: 2, stack: 2, collect: 3, path: 1, unpath: 1, empty: 2, harvest: 5 };
 
 interface Act { kind: Kind; tx: number; ty: number; icon: string; tool: ToolKind | null; slot: number; what: string; prio: number; }
 const mk = (): Act => ({ kind: 'none', tx: 0, ty: 0, icon: 'icon_hand', tool: null, slot: -1, what: '', prio: 0 });
@@ -98,7 +99,7 @@ export class Actions {
     if (G.flags.carry) {
       if (!facing) return;
       const h2 = L.objAt(x, y);
-      if (h2 && (h2.o.k === 'bigrock' || h2.o.k === 'rockpile')) { this.set(a, 'stack', x, y, 'rockpile_1', null); return; }
+      if (h2 && (h2.o.k === 'bigrock' || h2.o.k === 'rockpile' || (h2.o.k === 'wheelbarrow' && (h2.o.g ?? 0) < WHEELBARROW_CAP))) { this.set(a, 'stack', x, y, h2.o.k === 'wheelbarrow' ? 'wheelbarrow_full' : 'rockpile_1', null); return; }
       const tt = L.terrain[i];
       if (!h2 && !L.crops.has(i) && (tt === T.Grass || tt === T.Dirt || tt === T.Cave || tt === T.Stone || tt === T.Floor)) this.set(a, 'drop', x, y, 'bigrock', null);
       return;
@@ -136,6 +137,9 @@ export class Actions {
           if (!o.m && sl && ITEMS[sl.id]?.cat === 'tool') { this.set(a, 'hit', x, y, this.toolIcon(ITEMS[sl.id].tool!), ITEMS[sl.id].tool!, G.player.sel); return; }
           this.set(a, 'interact', x, y, 'icon_gear', null, -1, 'furnace:' + hit.i); return;
         }
+        case 'wheelbarrow':
+          if ((o.g ?? 0) > 0) { this.set(a, 'empty', x, y, 'item_stone', null, -1, String(hit.i)); return; }
+          break;
         case 'bigrock': {
           if (!facing) return;
           const sl = selected();
@@ -156,6 +160,7 @@ export class Actions {
       let tool: ToolKind | null = null;
       if (o.k === 'weed' || o.k === 'tallgrass' || o.k === 'flowers') tool = 'scythe';
       else if (def.tool === 'axe' || def.tool === 'pickaxe' || def.tool === 'scythe') tool = def.tool;
+      else if (def.item) { const sl = selected(); tool = sl && ITEMS[sl.id]?.tool ? ITEMS[sl.id].tool! : 'axe'; }
       if (!tool) return;
       let slot = this.toolSlot(tool);
       // mato: qualquer ferramenta selecionada serve
@@ -190,7 +195,11 @@ export class Actions {
       if (sl >= 0 && (G.player.water < cap || (sd?.tool === 'can'))) this.set(a, 'refill', x, y, this.toolIcon('can'), 'can', sl);
       return;
     }
-    if (sd?.place && (t === T.Grass || t === T.Dirt || t === T.Floor) && !L.occ[i] && !L.crops.has(i)) {
+    if (s?.id === 'path' && (t === T.Grass || t === T.Dirt) && !L.occ[i] && !L.crops.has(i) && !isTilled(L, i) && L.outdoor) {
+      this.set(a, 'path', x, y, 'item_path', null, G.player.sel); return;
+    }
+    if (t === T.Stone && L.id === 'farm' && sd?.tool === 'pickaxe' && !L.occ[i]) { this.set(a, 'unpath', x, y, this.toolIcon('pickaxe'), 'pickaxe', G.player.sel); return; }
+    if (sd?.place && (t === T.Grass || t === T.Dirt || t === T.Floor || t === T.Stone || t === T.Cave) && !L.occ[i] && !L.crops.has(i) && !(sd.place === 'sprinkler' ? false : isTilled(L, i))) {
       this.set(a, 'place', x, y, sd.icon, null, G.player.sel); return;
     }
     if (sd && TREE_SEEDS[s!.id] !== undefined && (t === T.Grass || t === T.Dirt) && L.outdoor && !L.occ[i]) {
@@ -223,6 +232,8 @@ export class Actions {
       case 'lift': return this.doLift(Number(a.what));
       case 'drop': return this.doDrop(a.tx, a.ty);
       case 'stack': return this.doStack(a.tx, a.ty);
+      case 'path': return this.doPath(a.tx, a.ty, a.slot);
+      case 'empty': return this.doEmpty(Number(a.what));
       case 'place': return this.doPlace(a.tx, a.ty, a.slot);
       case 'fertilize': return this.doFertilize(a.tx, a.ty, a.slot);
       default: return this.doTool(a);
@@ -278,6 +289,14 @@ export class Actions {
       if (a.kind === 'till') {
         if (canTill(L, x, y)) { till(L, x, y); V.refreshSoil(x, y); }
         P.burst('chip_dirt', cx, cy + 4, 7, { up: 45, speed: 26, life: 0.5 });
+        return;
+      }
+      if (a.kind === 'unpath') {
+        if (L.terrain[L.idx(x, y)] === T.Stone) {
+          L.terrain[L.idx(x, y)] = T.Grass; V.refreshTerrain(x, y);
+          this.h.drops.spawn('stone', 1, 0, cx, cy);
+          P.burst('chip_stone', cx, cy, 6, { up: 40 });
+        }
         return;
       }
       if (a.kind === 'clear') {
@@ -353,9 +372,13 @@ export class Actions {
         addXp('mining', o.g ?? 1);
         return;
       }
-      case 'torch': case 'furnace': {
-        if (o.m) { bus.emit('toast', 'A fornalha está em uso.', 'warn'); return; }
-        remove(); D.spawn(OBJ[o.k].item ?? o.k, 1, 0, cx, cy);
+      case 'torch': case 'furnace': case 'sprinkler': case 'scarecrow': case 'lantern': case 'fence': case 'wheelbarrow': {
+        if (o.m) { bus.emit('toast', 'A máquina está em uso.', 'warn'); return; }
+        if (o.k === 'wheelbarrow' && (o.g ?? 0) > 0) { bus.emit('toast', 'Esvazie o carrinho antes.', 'warn'); return; }
+        remove();
+        D.spawn(o.k === 'sprinkler' ? SPRINKLER_ITEMS[o.t ?? 0] : OBJ[o.k].item ?? o.k, 1, 0, cx, cy);
+        if (o.k === 'fence') this.updateFences(ax, ay);
+        P.burst('chip_wood', cx, cy, 5, { up: 40 });
         return;
       }
       case 'sapling':
@@ -493,6 +516,53 @@ export class Actions {
     }
   }
 
+  /** Atualiza a máscara de conexão das cercas ao redor de (x,y). */
+  private updateFences(x: number, y: number): void {
+    const L = this.h.loc;
+    const isF = (xx: number, yy: number) => L.objAt(xx, yy)?.o.k === 'fence';
+    for (const [dx, dy] of [[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      const xx = x + dx, yy = y + dy;
+      const h = L.objAt(xx, yy);
+      if (!h || h.o.k !== 'fence') continue;
+      h.o.v = (isF(xx, yy - 1) ? 1 : 0) | (isF(xx + 1, yy) ? 2 : 0) | (isF(xx, yy + 1) ? 4 : 0) | (isF(xx - 1, yy) ? 8 : 0);
+      this.h.view.refreshObj(h.i);
+    }
+  }
+
+  private doPath(x: number, y: number, slot: number): void {
+    const L = this.h.loc;
+    L.terrain[L.idx(x, y)] = T.Stone;
+    this.h.view.refreshTerrain(x, y);
+    takeFromSlot(slot, 1);
+    const [cx, cy] = this.center(x, y);
+    this.h.parts.burst('chip_stone', cx, cy + 3, 4, { up: 25, speed: 12 });
+  }
+
+  /** Esvazia o carrinho de mão: cada pedra grande vira pedras na mochila. */
+  private doEmpty(anchor: number): void {
+    const o = this.h.loc.objs.get(anchor);
+    if (!o) return;
+    const n = (o.g ?? 0) * ROCKPILE_STONE;
+    const left = addItem('stone', n);
+    if (left >= n) { bus.emit('toast', 'Mochila cheia!', 'warn'); return; }
+    bus.emit('pickup', 'stone', n - left);
+    o.g = Math.ceil(left / ROCKPILE_STONE);
+    this.h.loc.rev++;
+    this.h.view.refreshObj(anchor);
+  }
+
+  /** Área de efeito para prévia (irrigador/espantalho selecionado). */
+  previewArea(): { x: number; y: number; r: number; diag: boolean; circle: boolean } | null {
+    const a = this.cur;
+    if (a.kind !== 'place') return null;
+    const s = selected();
+    if (!s) return null;
+    const ti = SPRINKLER_ITEMS.indexOf(s.id);
+    if (ti >= 0) return { x: a.tx, y: a.ty, r: SPRINKLER_AREA[ti].r, diag: SPRINKLER_AREA[ti].diag, circle: false };
+    if (s.id === 'scarecrow') return { x: a.tx, y: a.ty, r: SCARECROW_RADIUS, diag: true, circle: true };
+    return null;
+  }
+
   private doCollect(anchor: number): void {
     const L = this.h.loc;
     const o = L.objs.get(anchor);
@@ -540,7 +610,8 @@ export class Actions {
     const L = this.h.loc;
     const hit = L.objAt(x, y);
     if (!hit) return;
-    if (hit.o.k === 'bigrock') { L.objs.set(hit.i, { k: 'rockpile', v: 0, g: 2 }); L.rev++; }
+    if (hit.o.k === 'wheelbarrow') { hit.o.g = (hit.o.g ?? 0) + 1; L.rev++; }
+    else if (hit.o.k === 'bigrock') { L.objs.set(hit.i, { k: 'rockpile', v: 0, g: 2 }); L.rev++; }
     else if (hit.o.k === 'rockpile') { hit.o.g = (hit.o.g ?? 1) + 1; L.rev++; }
     else return;
     this.h.view.refreshObj(hit.i);
@@ -548,17 +619,21 @@ export class Actions {
     this.h.player.carrying = false;
     const [cx, cy] = this.center(x, y);
     this.h.parts.burst('chip_stone', cx, cy, 6, { up: 35 });
-    bus.emit('toast', `Pilha de pedras: ${hit.o.k === 'rockpile' ? hit.o.g : 2} pedras grandes.`, 'info');
+    if (hit.o.k === 'wheelbarrow') bus.emit('toast', `Carrinho de mão: ${hit.o.g}/${WHEELBARROW_CAP} pedras.`, 'info');
+    else bus.emit('toast', `Pilha de pedras: ${hit.o.k === 'rockpile' ? hit.o.g : 2} pedras grandes.`, 'info');
   }
 
   private doPlace(x: number, y: number, slot: number): void {
     const st = G.player.inv[slot];
     const kind = st ? ITEMS[st.id]?.place : undefined;
     if (!st || !kind) return;
-    const o: WObj = kind === 'chest' ? { k: 'chest', v: 0, inv: new Array(36).fill(null) } : { k: kind, v: 0 };
+    const o: WObj = kind === 'chest' ? { k: 'chest', v: 0, inv: new Array(36).fill(null) }
+      : kind === 'sprinkler' ? { k: 'sprinkler', v: 0, t: SPRINKLER_ITEMS.indexOf(st.id) }
+      : kind === 'wheelbarrow' ? { k: 'wheelbarrow', v: 0, g: 0 } : { k: kind, v: 0 };
     if (this.h.loc.place(x, y, o)) {
       takeFromSlot(slot, 1);
       this.h.view.refreshObj(this.h.loc.idx(x, y));
+      if (kind === 'fence') this.updateFences(x, y);
       const [cx, cy] = this.center(x, y);
       this.h.parts.burst('chip_dirt', cx, cy + 4, 5, { up: 30, speed: 14 });
       haptic.tap();

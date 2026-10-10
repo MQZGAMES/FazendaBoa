@@ -4,7 +4,8 @@ export type ObjKind =
   | 'house' | 'bin' | 'fence' | 'mailbox' | 'ore'
   | 'bed' | 'tv' | 'table' | 'chair' | 'rug' | 'fireplace' | 'window' | 'plant' | 'lamp' | 'shelf'
   | 'shop' | 'smith' | 'manor' | 'fountain' | 'bench' | 'lamppost' | 'flowerbed' | 'sign' | 'chest'
-  | 'ladder' | 'ladderup' | 'elevator' | 'crystal' | 'walltorch' | 'torch' | 'furnace' | 'bigrock' | 'rockpile' | 'minecart';
+  | 'ladder' | 'ladderup' | 'elevator' | 'crystal' | 'walltorch' | 'torch' | 'furnace' | 'bigrock' | 'rockpile' | 'minecart'
+  | 'sprinkler' | 'scarecrow' | 'lantern' | 'wheelbarrow';
 
 export type ToolKind = 'hoe' | 'can' | 'axe' | 'pickaxe' | 'scythe' | 'rod' | 'bucket';
 
@@ -62,7 +63,7 @@ export const OBJ: Record<ObjKind, ObjDef> = {
   bush: { name: 'Arbusto', solid: true, size: [2, 1], shadow: 'shadow_l' },
   house: { name: 'Casa', solid: true, size: [6, 3], door: { dx: [2, 3], dy: 2, act: 'door' } },
   bin: { name: 'Caixa de envio', solid: true, size: [2, 1] },
-  fence: { name: 'Cerca', solid: true, size: [1, 1] },
+  fence: { name: 'Cerca', solid: true, size: [1, 1], item: 'fence' },
   mailbox: { name: 'Caixa de correio', solid: true, size: [1, 1] },
   ore: { name: 'Minério', solid: true, size: [1, 1], tool: 'pickaxe', hp: 3 },
   bed: { name: 'Cama', solid: true, size: [2, 2] },
@@ -94,7 +95,22 @@ export const OBJ: Record<ObjKind, ObjDef> = {
   bigrock: { name: 'Pedra grande', solid: true, size: [1, 1], tool: 'pickaxe', hp: 2 },
   rockpile: { name: 'Pilha de pedras', solid: true, size: [1, 1], tool: 'pickaxe', hp: 1 },
   minecart: { name: 'Carrinho de mina', solid: true, size: [2, 1] },
+  sprinkler: { name: 'Irrigador', solid: true, size: [1, 1] },
+  scarecrow: { name: 'Espantalho', solid: true, size: [1, 1], item: 'scarecrow' },
+  lantern: { name: 'Lampião', solid: true, size: [1, 1], item: 'lantern', light: 96, lightColor: 0xffd27a },
+  wheelbarrow: { name: 'Carrinho de mão', solid: true, size: [1, 1], item: 'wheelbarrow' },
 };
+
+/** Área dos irrigadores (seção 14): raio em tiles e se inclui diagonais. */
+export const SPRINKLER_AREA: { r: number; diag: boolean }[] = [{ r: 1, diag: false }, { r: 1, diag: true }, { r: 2, diag: true }];
+export const SPRINKLER_ITEMS = ['sprinkler_0', 'sprinkler_1', 'sprinkler_2'];
+/** Espantalho protege num raio de 8 tiles; sem ele, corvo come no máx. 1 planta/dia. */
+export const SCARECROW_RADIUS = 8;
+export const CROW_CHANCE = 0.3;
+/** Carrinho de mão guarda até 10 pedras grandes. */
+export const WHEELBARROW_CAP = 10;
+/** Caminho de pedra: +10% de velocidade. */
+export const PATH_SPEED = 1.1;
 
 /** Tempo de crescimento das mudas de árvore (dias). */
 export const SAPLING_DAYS = 10;

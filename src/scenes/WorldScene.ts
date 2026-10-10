@@ -13,7 +13,7 @@ import { getLocation, locationExists } from '../world/locations';
 const OBJ_DOOR_ACTS = new Set(['door', 'shop', 'smith', 'manor']);
 import { FARM_SPAWN } from '../world/genFarm';
 import { HOUSE_WAKE } from '../world/genHouse';
-import type { Location } from '../world/Location';
+
 import { uiState } from '../ui/state';
 import { saveGame } from '../systems/Save';
 import { Particles } from '../systems/Particles';
@@ -23,6 +23,9 @@ import { endDay } from '../systems/DayCycle';
 import type { UIScene } from './UIScene';
 import { perf } from '../systems/Performance';
 import { Lighting } from '../systems/Lighting';
+import { setWorldRef } from '../systems/Crafting';
+import { PATH_SPEED } from '../data/objects';
+import { T, type Location } from '../world/Location';
 
 /** Cores de "color grading" por hora (multiplicativo). */
 const GRADE: [number, number, number, number][] = [
@@ -55,6 +58,8 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
   private kbMoving = false;
   private doorPush = 0;
   private gradeColor = 0xffffff;
+  private previewG: Phaser.GameObjects.Graphics | null = null;
+  private previewKey = '';
   private lighting!: Lighting;
 
   constructor() { super('World'); }
@@ -103,6 +108,8 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
     else (this.scene.get('UI') as UIScene).setHudVisible(true);
     this.cameras.main.fadeIn(280, 0, 0, 0);
+    this.previewG = null; this.previewKey = '';
+    this.sprinklerShow();
     bus.emit('time');
     bus.emit('inventory');
     if (G.flags.justWoke) {
@@ -202,6 +209,8 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     uiState.exhaust = G.flags.exhaust ?? -1;
     const p = this.player;
     p.tired = G.player.energy < G.player.maxEnergy * 0.15;
+    p.speedMul = this.loc.terrainAt(p.tx, p.ty) === T.Stone ? PATH_SPEED : 1;
+    setWorldRef(this.loc, p.tx, p.ty);
     p.update(dt, this.loc);
     if (!this.transitioning) { G.player.x = p.x; G.player.y = p.y; G.player.dir = p.dir; }
     this.updateCamera(dt);
@@ -211,6 +220,7 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     this.parts.update(dt);
     this.drops.update(dt, p.x, p.y);
     if (!input.locked) this.updateActions();
+    this.drawPreview();
     this.checkExits(dt);
     this.updateAtmosphere(dt, view);
     if (this.lighting.darkness > 0) {
@@ -362,6 +372,39 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
       void saveGame();
       ui.showSummary(sum, () => this.scene.restart());
     });
+  }
+
+  /** Prévia da área de efeito ao posicionar irrigadores e espantalhos. */
+  private drawPreview(): void {
+    const area = this.actions.previewArea();
+    const key = area ? `${area.x},${area.y},${area.r},${area.diag}` : '';
+    if (key === this.previewKey) return;
+    this.previewKey = key;
+    if (!area) { this.previewG?.clear(); return; }
+    if (!this.previewG) this.previewG = this.add.graphics().setDepth(-3);
+    const g = this.previewG;
+    g.clear();
+    g.fillStyle(area.circle ? 0xffe070 : 0x60b0ff, 0.28);
+    g.lineStyle(1, area.circle ? 0xffe070 : 0x9ad0ff, 0.6);
+    for (let dy = -area.r; dy <= area.r; dy++) for (let dx = -area.r; dx <= area.r; dx++) {
+      if (!dx && !dy) continue;
+      if (!area.diag && dx && dy) continue;
+      if (area.circle && dx * dx + dy * dy > area.r * area.r) continue;
+      g.fillRect((area.x + dx) * TILE + 1, (area.y + dy) * TILE + 1, TILE - 2, TILE - 2);
+    }
+  }
+
+  /** Irrigadores borrifando água de manhã (antes das 7:00). */
+  private sprinklerShow(): void {
+    if (!this.loc.outdoor || G.time.min >= 7 * 60) return;
+    let n = 0;
+    for (const [i, o] of this.loc.objs) {
+      if (o.k !== 'sprinkler' || n > 12) continue;
+      n++;
+      const x = (i % this.loc.w) * TILE + 8, y = Math.floor(i / this.loc.w) * TILE + 6;
+      const r = 1 + (o.t ?? 0);
+      for (let k = 0; k < 3; k++) this.time.delayedCall(300 + k * 450, () => this.parts.burst('spray', x, y, 8 + r * 4, { up: 70, speed: 22 * r, grav: 150, life: 0.7 }));
+    }
   }
 
   private drawCollision(): void {

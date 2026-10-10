@@ -43,6 +43,15 @@ export const ITEMS: Record<string, ItemDef> = {
   chest: { id: 'chest', name: 'Baú', cat: 'craft', price: 0, icon: 'item_chest', place: 'chest', desc: 'Coloque no chão para guardar 36 itens.' },
   backpack: { id: 'backpack', name: 'Mochila', cat: 'craft', price: 0, icon: 'item_backpack' },
   torch: { id: 'torch', name: 'Tocha', cat: 'craft', price: 5, icon: 'item_torch', place: 'torch', desc: 'Ilumina à noite e na mina.' },
+  sprinkler_0: { id: 'sprinkler_0', name: 'Irrigador', cat: 'craft', price: 0, icon: 'item_sprinkler_0', place: 'sprinkler', desc: 'Rega os 4 tiles vizinhos todo dia às 6:00.' },
+  sprinkler_1: { id: 'sprinkler_1', name: 'Irrigador de qualidade', cat: 'craft', price: 0, icon: 'item_sprinkler_1', place: 'sprinkler', desc: 'Rega uma área 3x3 todo dia às 6:00.' },
+  sprinkler_2: { id: 'sprinkler_2', name: 'Irrigador avançado', cat: 'craft', price: 0, icon: 'item_sprinkler_2', place: 'sprinkler', desc: 'Rega uma área 5x5 todo dia às 6:00.' },
+  scarecrow: { id: 'scarecrow', name: 'Espantalho', cat: 'craft', price: 0, icon: 'item_scarecrow', place: 'scarecrow', desc: 'Protege as plantações dos corvos num raio de 8.' },
+  fence: { id: 'fence', name: 'Cerca de madeira', cat: 'craft', price: 1, icon: 'item_fence', place: 'fence', desc: 'Limita animais e decora. Conecta-se às vizinhas.' },
+  path: { id: 'path', name: 'Caminho de pedra', cat: 'craft', price: 1, icon: 'item_path', desc: 'Coloque na grama: anda 10% mais rápido sobre ele.' },
+  lantern: { id: 'lantern', name: 'Lampião', cat: 'craft', price: 0, icon: 'item_lantern', place: 'lantern', desc: 'Luz forte à noite.' },
+  wheelbarrow: { id: 'wheelbarrow', name: 'Carrinho de mão', cat: 'craft', price: 0, icon: 'item_wheelbarrow', place: 'wheelbarrow', desc: 'Guarda até 10 pedras grandes. Toque para esvaziar em pedras.' },
+  bait: { id: 'bait', name: 'Isca', cat: 'craft', price: 1, icon: 'item_bait', desc: 'Faz o peixe morder mais rápido.' },
   furnace: { id: 'furnace', name: 'Fornalha', cat: 'craft', price: 0, icon: 'item_furnace', place: 'furnace', desc: '5 minérios + 1 carvão = 1 barra (30 min).' },
 };
 for (const [id, m] of Object.entries(MINERALS)) {

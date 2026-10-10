@@ -8,7 +8,8 @@ import { ITEMS, MAX_STACK, itemIcon } from '../data/items';
 import { QUALITY_MULT } from '../data/crops';
 import { GENERAL_STORE, BACKPACK_SIZES, type ShopItem } from '../data/shops';
 import { RECIPES, type Recipe } from '../data/recipes';
-import { addItem, countItem, removeItem, canAdd } from '../systems/Inventory';
+import { addItem, countItem, canAdd } from '../systems/Inventory';
+import { countAvailable, consume } from '../systems/Crafting';
 import { shippingBin, itemValue } from '../systems/DayCycle';
 import { skillLevel } from '../systems/Skills';
 import { bus } from '../systems/EventBus';
@@ -381,13 +382,15 @@ export class ShopPanel extends ListPanel<ShopItem> {
 export class CraftPanel extends ListPanel<Recipe> {
   private infoT!: Phaser.GameObjects.BitmapText;
   private makeB: ReturnType<Modal['button']> | null = null;
+  private locked = 0;
 
   private unlocked(r: Recipe): boolean { return !r.req || skillLevel(r.req[0]) >= r.req[1]; }
-  private canMake(r: Recipe): boolean { return Object.entries(r.ing).every(([id, n]) => countItem(id) >= n); }
+  private canMake(r: Recipe): boolean { return Object.entries(r.ing).every(([id, n]) => countAvailable(id) >= n); }
 
   present(): void {
     this.clear();
     this.items = RECIPES.filter((r) => this.unlocked(r));
+    this.locked = RECIPES.filter((r) => !this.unlocked(r)).length;
     this.sel = this.items.length ? 0 : -1;
     const W = Math.min(390, display.cssW - 12);
     this.rowH = 64;
@@ -411,7 +414,7 @@ export class CraftPanel extends ListPanel<Recipe> {
     out.push(txt(this.scene, x + 52, y + 8, `${ITEMS[r.id]?.name ?? r.id}${r.qty > 1 ? ' x' + r.qty : ''}`, 'dark', 1.5));
     let ix = x + 52;
     for (const [id, n] of Object.entries(r.ing)) {
-      const have = countItem(id);
+      const have = countAvailable(id);
       out.push(this.scene.add.image(ix + 8, y + 42, 'atlas', itemIcon(id)).setScale(UI * 0.7));
       const t = txt(this.scene, ix + 20, y + 34, `${have}/${n}`, have >= n ? 'dark' : 'light', 1.2);
       if (have < n) t.setTint(0xd8443a);
@@ -428,7 +431,8 @@ export class CraftPanel extends ListPanel<Recipe> {
     const r = this.items[this.sel];
     if (!r) { this.infoT.setText('Nenhuma receita disponível.'); return; }
     const d = ITEMS[r.id];
-    this.infoT.setText(`${d?.name ?? r.id}: ${d?.desc ?? ''}`);
+    const more = this.locked ? ` (${this.locked} receitas liberam com níveis de habilidade.)` : '';
+    this.infoT.setText(`${d?.name ?? r.id}: ${d?.desc ?? ''} Conta ingredientes dos baús próximos.${more}`);
     this.makeB?.bg.setAlpha(this.canMake(r) ? 1 : 0.6);
   }
 
@@ -437,7 +441,7 @@ export class CraftPanel extends ListPanel<Recipe> {
     if (!r) return;
     if (!this.canMake(r)) { bus.emit('toast', 'Faltam ingredientes.', 'warn'); return; }
     if (!canAdd(r.id)) { bus.emit('toast', 'Mochila cheia!', 'warn'); return; }
-    for (const [id, n] of Object.entries(r.ing)) removeItem(id, n);
+    for (const [id, n] of Object.entries(r.ing)) consume(id, n);
     addItem(r.id, r.qty);
     bus.emit('toast', `Fabricou ${ITEMS[r.id]?.name ?? r.id}!`, 'good');
     haptic.tap();

@@ -57,8 +57,10 @@ export function objFrame(o: WObj, season: number): string {
     case 'crystal': return `crystal_${o.v % 3}`;
     case 'rockpile': return `rockpile_${(o.g ?? 1) >= 8 ? 2 : (o.g ?? 1) >= 4 ? 1 : 0}`;
     case 'furnace': return o.m ? 'furnace_on' : 'furnace';
+    case 'sprinkler': return `sprinkler_${o.t ?? 0}`;
+    case 'wheelbarrow': return (o.g ?? 0) > 0 ? 'wheelbarrow_full' : 'wheelbarrow';
     case 'bin': return 'bin';
-    case 'fence': return `fence_${o.v}`;
+    case 'fence': return `fencem_${o.v & 15}`;
     case 'mailbox': return 'mailbox';
     case 'ore': return `rock_${ROCK_KINDS[o.t ?? 0]}_${o.v}`;
     default: return o.k;
@@ -66,7 +68,7 @@ export function objFrame(o: WObj, season: number): string {
 }
 
 /** Ajuste vertical (px) do sprite em relação à base do tile. */
-const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1, bed: 1, tv: 1, table: 2, chair: 1, plant: 1, lamp: 1, shelf: 1, fireplace: 0, window: -2, shop: 0, smith: 0, manor: 0, fountain: 2, bench: 1, lamppost: 1, chest: 1, sign: 1, ladderup: 2, elevator: 1, crystal: 1, torch: 1, furnace: 1, walltorch: -4 };
+const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1, bed: 1, tv: 1, table: 2, chair: 1, plant: 1, lamp: 1, shelf: 1, fireplace: 0, window: -2, shop: 0, smith: 0, manor: 0, fountain: 2, bench: 1, lamppost: 1, chest: 1, sign: 1, ladderup: 2, elevator: 1, crystal: 1, torch: 1, furnace: 1, walltorch: -4, scarecrow: 2, lantern: 1, sprinkler: 1 };
 
 /**
  * Renderização de um mapa: tilemap com autotiling, água animada e objetos
@@ -165,6 +167,16 @@ export class LocationView {
       const idx = this.tileIndexAt(x, y);
       if (idx < 0) this.ground.removeTileAt(x, y);
       else this.ground.putTileAt(idx, x, y);
+    }
+  }
+
+  /** Recalcula o tile de chão (e vizinhos, por causa do autotile) após mudar o terreno. */
+  refreshTerrain(x: number, y: number): void {
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+      const xx = x + i, yy = y + j;
+      if (!this.loc.inb(xx, yy)) continue;
+      const idx = this.tileIndexAt(xx, yy);
+      if (idx < 0) this.ground.removeTileAt(xx, yy); else this.ground.putTileAt(idx, xx, yy);
     }
   }
 

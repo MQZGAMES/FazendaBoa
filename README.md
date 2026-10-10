@@ -24,6 +24,9 @@ jogo original). Sem áudio nesta versão.
 - **Fornalha:** fabrique (20 minério de bronze + 25 pedras); 5 minérios + 1 carvão = 1 barra em 30 min.
 - **Pedras grandes:** toque com a mão livre para erguer; solte num tile livre ou empilhe sobre outra pedra
   (pilha de pedras rende pedra ao quebrar). Com a picareta selecionada, você quebra em vez de erguer.
+- **Fabricar (martelo):** receitas liberam com níveis de habilidade e contam ingredientes de baús próximos.
+  Irrigadores regam às 6:00 (prévia da área ao posicionar); espantalho protege num raio de 8 contra corvos;
+  caminho de pedra dá +10% de velocidade (remova com a picareta); cercas se conectam sozinhas.
 - **Energia:** ao zerar, você ainda age, mas desmaia em 5 minutos (cronômetro no topo) — coma algo ou durma.
 - **Save:** automático ao dormir e ao sair. Menu (engrenagem) → Exportar/Importar save (código ou .json).
 - **Debug:** toque 5 vezes no relógio (no dev ou com `?debug` na URL).
@@ -36,7 +39,7 @@ Dica: no iPhone, use *Compartilhar → Adicionar à Tela de Início* para tela c
 - [x] Fase 2 — Agricultura, tempo, energia, dormir, save/exportar/importar
 - [x] Fase 3 — Vila, loja, caixa de envio, mochila (12→24→36), baús e fabricação básica
 - [x] Fase 4 — Árvores, mina (40 andares, elevador, gemas, lago no 20), fornalha e carregar pedras
-- [ ] Fase 5 — Crafting
+- [x] Fase 5 — Crafting: irrigadores (3 níveis), espantalho e corvos, cercas, caminho de pedra, tochas, lampião, carrinho de mão, isca
 - [ ] Fase 6 — Galinhas, vacas e construções
 - [ ] Fase 7 — Pesca
 - [ ] Fase 8 — Cavalo e ferreiro

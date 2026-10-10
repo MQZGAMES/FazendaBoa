@@ -8,6 +8,7 @@ import { Rng } from '../art/rng';
 import { bus } from './EventBus';
 import { ITEMS } from '../data/items';
 import { QUALITY_MULT } from '../data/crops';
+import { SPRINKLER_AREA, SCARECROW_RADIUS, CROW_CHANCE } from '../data/objects';
 
 export interface ShipLine { id: string; q: number; ql: number; total: number; }
 export interface DaySummary {
@@ -17,6 +18,7 @@ export interface DaySummary {
   total: number;
   died: number;
   late: boolean;
+  crow: boolean;
 }
 
 /** Previsão para amanhã conforme a estação. */
@@ -84,6 +86,7 @@ export function endDay(passOut: boolean, penalize = true): DaySummary {
     const r = growDay(L, season);
     died += r.died;
     if (G.weather.today === 'rain' || G.weather.today === 'storm') rainWater(L);
+    runSprinklers(L);
     // mudas crescem
     for (const [i, o] of L.objs) {
       if (o.k !== 'sapling') continue;
@@ -93,6 +96,7 @@ export function endDay(passOut: boolean, penalize = true): DaySummary {
     }
   }
   spawnDebris();
+  const crow = crowAttack();
 
   // energia
   const p = G.player;
@@ -101,7 +105,40 @@ export function endDay(passOut: boolean, penalize = true): DaySummary {
   G.flags.daysPlayed = (G.flags.daysPlayed ?? 0) + 1;
   bus.emit('day');
   bus.emit('money', G.player.money);
-  return { passedOut: passOut, penalty, shipped, total, died, late };
+  return { passedOut: passOut, penalty, shipped, total, died, late, crow };
+}
+
+/** Irrigadores regam automaticamente às 6:00. */
+function runSprinklers(L: import('../world/Location').Location): void {
+  for (const [i, o] of L.objs) {
+    if (o.k !== 'sprinkler') continue;
+    const area = SPRINKLER_AREA[o.t ?? 0];
+    const x = i % L.w, y = Math.floor(i / L.w);
+    for (let dy = -area.r; dy <= area.r; dy++) for (let dx = -area.r; dx <= area.r; dx++) {
+      if (!dx && !dy) continue;
+      if (!area.diag && dx && dy) continue;
+      const xx = x + dx, yy = y + dy;
+      if (L.inb(xx, yy)) { const k = L.idx(xx, yy); if (L.soil[k] & 1) L.soil[k] |= 2; }
+    }
+  }
+}
+
+/** Sem espantalho por perto, um corvo pode comer 1 planta por dia (no máximo). */
+function crowAttack(): boolean {
+  const L = G.locs.get('farm');
+  if (!L || Math.random() > CROW_CHANCE) return false;
+  const scare: [number, number][] = [];
+  for (const [i, o] of L.objs) if (o.k === 'scarecrow') scare.push([i % L.w, Math.floor(i / L.w)]);
+  const victims: number[] = [];
+  for (const [i, c] of L.crops) {
+    if (c.dead) continue;
+    const x = i % L.w, y = Math.floor(i / L.w);
+    if (scare.some(([sx, sy]) => (sx - x) ** 2 + (sy - y) ** 2 <= SCARECROW_RADIUS * SCARECROW_RADIUS)) continue;
+    victims.push(i);
+  }
+  if (victims.length < 4) return false; // poupa quem tem poucas plantas
+  L.crops.delete(victims[Math.floor(Math.random() * victims.length)]);
+  return true;
 }
 
 /** Mato, pedras e galhos reaparecem aos poucos na fazenda. */
