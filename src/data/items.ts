@@ -51,6 +51,11 @@ export const ITEMS: Record<string, ItemDef> = {
   path: { id: 'path', name: 'Caminho de pedra', cat: 'craft', price: 1, icon: 'item_path', desc: 'Coloque na grama: anda 10% mais rápido sobre ele.' },
   lantern: { id: 'lantern', name: 'Lampião', cat: 'craft', price: 0, icon: 'item_lantern', place: 'lantern', desc: 'Luz forte à noite.' },
   wheelbarrow: { id: 'wheelbarrow', name: 'Carrinho de mão', cat: 'craft', price: 0, icon: 'item_wheelbarrow', place: 'wheelbarrow', desc: 'Guarda até 10 pedras grandes. Toque para esvaziar em pedras.' },
+  hay: { id: 'hay', name: 'Ração', cat: 'animal', price: 0, icon: 'item_hay', desc: 'Coloque no cocho para alimentar os animais.' },
+  egg: { id: 'egg', name: 'Ovo', cat: 'animal', price: 50, icon: 'item_egg', edible: 25, desc: 'Um ovo fresquinho.' },
+  big_egg: { id: 'big_egg', name: 'Ovo grande', cat: 'animal', price: 95, icon: 'item_big_egg', edible: 40, desc: 'Um ovo enorme! Galinha feliz.' },
+  milk: { id: 'milk', name: 'Leite', cat: 'animal', price: 125, icon: 'item_milk', edible: 38, desc: 'Leite fresco de vaca.' },
+  big_milk: { id: 'big_milk', name: 'Leite grande', cat: 'animal', price: 190, icon: 'item_big_milk', edible: 50, desc: 'Uma jarra cheia de leite cremoso.' },
   bait: { id: 'bait', name: 'Isca', cat: 'craft', price: 1, icon: 'item_bait', desc: 'Faz o peixe morder mais rápido.' },
   furnace: { id: 'furnace', name: 'Fornalha', cat: 'craft', price: 0, icon: 'item_furnace', place: 'furnace', desc: '5 minérios + 1 carvão = 1 barra (30 min).' },
 };

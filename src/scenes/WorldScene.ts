@@ -24,6 +24,9 @@ import type { UIScene } from './UIScene';
 import { perf } from '../systems/Performance';
 import { Lighting } from '../systems/Lighting';
 import { setWorldRef } from '../systems/Crafting';
+import { AnimalEnt } from '../entities/Animal';
+import { animalSchedule } from '../systems/Animals';
+import { OBJ } from '../data/objects';
 import { PATH_SPEED } from '../data/objects';
 import { T, type Location } from '../world/Location';
 
@@ -59,6 +62,11 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
   private doorPush = 0;
   private gradeColor = 0xffffff;
   private previewG: Phaser.GameObjects.Graphics | null = null;
+  private animals: AnimalEnt[] = [];
+  private ghost: Phaser.GameObjects.Image | null = null;
+  private ghostG: Phaser.GameObjects.Graphics | null = null;
+  private ghostOk = false;
+  private ghostAnchor = { x: 0, y: 0 };
   private previewKey = '';
   private lighting!: Lighting;
 
@@ -97,7 +105,15 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     bus.on('resize', this.onResize, this);
     bus.on('day', this.onDayChanged, this);
     bus.on('debug', this.onDebugDay, this);
+    bus.on('animals', this.spawnAnimals, this);
+    bus.on('time', this.onTime, this);
+    this.spawnAnimals();
     this.events.once('shutdown', () => {
+      bus.off('animals', this.spawnAnimals, this);
+      bus.off('time', this.onTime, this);
+      for (const a of this.animals) a.destroy();
+      this.animals = [];
+      this.ghost = null; this.ghostG = null;
       bus.off('resize', this.onResize, this); bus.off('day', this.onDayChanged, this); bus.off('debug', this.onDebugDay, this);
       this.drops.persist(this.loc);
       this.view.destroy();
@@ -147,6 +163,69 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
   }
 
   private onResize(): void { this.setupCamera(false); }
+
+  /** Animais deste mapa (recriados quando mudam de lugar). */
+  private spawnAnimals(): void {
+    for (const a of this.animals) a.destroy();
+    this.animals = G.animals.filter((a) => a.loc === this.loc.id).map((a) => new AnimalEnt(this, a));
+  }
+
+  private onTime(): void { animalSchedule(); }
+
+  animalAt(x: number, y: number): AnimalEnt | null {
+    for (const a of this.animals) {
+      const big = a.st.kind === 'cow';
+      if (a.ty === y && (a.tx === x || (big && Math.abs(a.st.x - (x * TILE + 8)) < 16))) return a;
+    }
+    return null;
+  }
+
+  /** Modo de construção: fantasma da obra à frente do jogador; ação confirma. */
+  private updatePlacement(): boolean {
+    const pending = G.flags.pendingBuild;
+    if (!pending || this.loc.id !== 'farm') {
+      if (this.ghost) { this.ghost.destroy(); this.ghostG?.destroy(); this.ghost = null; this.ghostG = null; }
+      return false;
+    }
+    const kind = pending === 2 ? 'barn' : 'coop';
+    const [w, h] = OBJ[kind].size;
+    const f = this.player.facingTile({ x: 0, y: 0 });
+    const ax = f.x - Math.floor(w / 2), ay = this.player.dir === 1 ? f.y - h + 1 : this.player.dir === 0 ? f.y : f.y - Math.floor(h / 2);
+    if (!this.ghost) {
+      this.ghost = this.add.image(0, 0, 'atlas', kind).setOrigin(0.5, 1).setAlpha(0.55).setDepth(9400);
+      this.ghostG = this.add.graphics().setDepth(9390);
+      bus.emit('toast', `Escolha o local do ${kind === 'barn' ? 'celeiro' : 'galinheiro'}: fique de frente e toque em ação. (Menu → cancelar obra)`, 'info');
+    }
+    if (ax !== this.ghostAnchor.x || ay !== this.ghostAnchor.y || !this.ghostG!.visible) {
+      this.ghostAnchor.x = ax; this.ghostAnchor.y = ay;
+      let ok = true;
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const x = ax + i, y = ay + j;
+        const t = this.loc.terrainAt(x, y);
+        if (!this.loc.inb(x, y) || this.loc.occ[this.loc.idx(x, y)] || (t !== T.Grass && t !== T.Dirt) || this.loc.soil[this.loc.idx(x, y)] || this.loc.crops.has(this.loc.idx(x, y))) ok = false;
+      }
+      const px = this.player.tx, py = this.player.ty;
+      if (px >= ax && px < ax + w && py >= ay && py < ay + h) ok = false;
+      this.ghostOk = ok;
+      const g = this.ghostG!;
+      g.clear().fillStyle(ok ? 0x60e060 : 0xe04040, 0.35).lineStyle(1, ok ? 0x80ff80 : 0xff6060, 0.8);
+      g.fillRect(ax * TILE, ay * TILE, w * TILE, h * TILE).strokeRect(ax * TILE, ay * TILE, w * TILE, h * TILE);
+      this.ghost!.setPosition((ax + w / 2) * TILE, (ay + h) * TILE).setTint(ok ? 0xffffff : 0xff8080);
+    }
+    uiState.actionIcon = 'icon_hammer';
+    uiState.actionEnabled = this.ghostOk;
+    for (const k of this.corners) k.setVisible(false);
+    if (input.actionPressed) {
+      if (!this.ghostOk) { bus.emit('toast', 'Local inválido: limpe a área (mato, pedras, árvores) e evite terra arada.', 'warn'); return true; }
+      this.loc.place(ax, ay, { k: kind, v: 0, g: 1 });
+      this.view.refreshObj(this.loc.idx(ax, ay));
+      delete G.flags.pendingBuild;
+      bus.emit('toast', 'Obra iniciada! Fica pronta amanhã.', 'good');
+      this.shake(80, 2);
+      this.parts.burst('chip_wood', (ax + w / 2) * TILE, (ay + h) * TILE, 14, { up: 60, speed: 40 });
+    }
+    return true;
+  }
 
   private onDayChanged(): void {
     this.view.setSeason(G.time.season);
@@ -219,7 +298,8 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     this.view.update(dt, view, p.x, p.y, wind);
     this.parts.update(dt);
     this.drops.update(dt, p.x, p.y);
-    if (!input.locked) this.updateActions();
+    for (let i = 0; i < this.animals.length; i++) this.animals[i].update(dt, this.loc);
+    if (!input.locked && !this.updatePlacement()) this.updateActions();
     this.drawPreview();
     this.checkExits(dt);
     this.updateAtmosphere(dt, view);

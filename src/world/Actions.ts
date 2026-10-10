@@ -14,7 +14,9 @@ import { SHOP_OPEN, SHOP_CLOSE, SHOP_CLOSED_WEEKDAY } from '../data/shops';
 import { MINE_ROCKS, PICK_POWER, LADDER_BASE, LADDER_STEP, MINE_FLOORS, ROCKPILE_STONE, SMELT } from '../data/mine';
 import { SPRINKLER_AREA, SPRINKLER_ITEMS, SCARECROW_RADIUS, WHEELBARROW_CAP } from '../data/objects';
 import { machineReady, smeltableOre, loadFurnace, minutesLeft } from '../systems/Machines';
-import { addItem } from '../systems/Inventory';
+import { addItem, countItem, removeItem } from '../systems/Inventory';
+import { pet, hearts } from '../systems/Animals';
+import type { AnimalEnt } from '../entities/Animal';
 import { selected, slotOf, takeFromSlot } from '../systems/Inventory';
 import { settings } from '../systems/Settings';
 import { bus } from '../systems/EventBus';
@@ -33,10 +35,11 @@ export interface WorldHost {
   shake(ms: number, px: number): void;
   goTo(loc: string, x: number, y: number, dir: 0 | 1 | 2 | 3): void;
   sleepPrompt(): void;
+  animalAt(x: number, y: number): AnimalEnt | null;
 }
 
-type Kind = 'none' | 'harvest' | 'interact' | 'till' | 'water' | 'refill' | 'plant' | 'hit' | 'clear' | 'eat' | 'plantTree' | 'place' | 'fertilize' | 'collect' | 'load' | 'lift' | 'drop' | 'stack' | 'path' | 'unpath' | 'empty';
-const PRIO: Record<Kind, number> = { none: 0, eat: 0.5, till: 1, water: 1, refill: 1, plant: 1.2, hit: 1, clear: 1, plantTree: 1, place: 1, fertilize: 1.3, interact: 2, load: 2, lift: 2, drop: 2, stack: 2, collect: 3, path: 1, unpath: 1, empty: 2, harvest: 5 };
+type Kind = 'none' | 'harvest' | 'interact' | 'till' | 'water' | 'refill' | 'plant' | 'hit' | 'clear' | 'eat' | 'plantTree' | 'place' | 'fertilize' | 'collect' | 'load' | 'lift' | 'drop' | 'stack' | 'path' | 'unpath' | 'empty' | 'pet' | 'milk' | 'pick' | 'feed';
+const PRIO: Record<Kind, number> = { none: 0, eat: 0.5, till: 1, water: 1, refill: 1, plant: 1.2, hit: 1, clear: 1, plantTree: 1, place: 1, fertilize: 1.3, interact: 2, load: 2, lift: 2, drop: 2, stack: 2, collect: 3, path: 1, unpath: 1, empty: 2, pet: 2, milk: 3, pick: 4, feed: 2, harvest: 5 };
 
 interface Act { kind: Kind; tx: number; ty: number; icon: string; tool: ToolKind | null; slot: number; what: string; prio: number; }
 const mk = (): Act => ({ kind: 'none', tx: 0, ty: 0, icon: 'icon_hand', tool: null, slot: -1, what: '', prio: 0 });
@@ -106,6 +109,12 @@ export class Actions {
     }
     const crop = L.crops.get(i);
     if (crop && cropReady(crop)) { this.set(a, 'harvest', x, y, 'icon_hand', null); return; }
+    const an = this.h.animalAt(x, y);
+    if (an) {
+      const sl = this.toolSlot('bucket');
+      if (an.st.kind === 'cow' && an.st.milk && sl >= 0) { this.set(a, 'milk', x, y, this.toolIcon('bucket'), 'bucket', sl, String(an.st.id)); return; }
+      this.set(a, 'pet', x, y, an.st.petted ? 'icon_talk' : 'icon_hand', null, -1, String(an.st.id)); return;
+    }
     const hit = L.objAt(x, y);
     if (hit) {
       const o = hit.o;
@@ -137,6 +146,10 @@ export class Actions {
           if (!o.m && sl && ITEMS[sl.id]?.cat === 'tool') { this.set(a, 'hit', x, y, this.toolIcon(ITEMS[sl.id].tool!), ITEMS[sl.id].tool!, G.player.sel); return; }
           this.set(a, 'interact', x, y, 'icon_gear', null, -1, 'furnace:' + hit.i); return;
         }
+        case 'product': this.set(a, 'pick', x, y, itemIcon(o.it ?? 'egg'), null, -1, String(hit.i)); return;
+        case 'trough':
+          if (!o.g && countItem('hay') > 0) { this.set(a, 'feed', x, y, 'item_hay', null, -1, String(hit.i)); return; }
+          this.set(a, 'interact', x, y, 'icon_talk', null, -1, 'trough'); return;
         case 'wheelbarrow':
           if ((o.g ?? 0) > 0) { this.set(a, 'empty', x, y, 'item_stone', null, -1, String(hit.i)); return; }
           break;
@@ -234,6 +247,10 @@ export class Actions {
       case 'stack': return this.doStack(a.tx, a.ty);
       case 'path': return this.doPath(a.tx, a.ty, a.slot);
       case 'empty': return this.doEmpty(Number(a.what));
+      case 'pet': return this.doPet(Number(a.what), a.tx, a.ty);
+      case 'milk': return this.doMilk(Number(a.what), a.tx, a.ty);
+      case 'pick': return this.doPick(Number(a.what));
+      case 'feed': return this.doFeed();
       case 'place': return this.doPlace(a.tx, a.ty, a.slot);
       case 'fertilize': return this.doFertilize(a.tx, a.ty, a.slot);
       default: return this.doTool(a);
@@ -516,6 +533,58 @@ export class Actions {
     }
   }
 
+  private doPet(id: number, x: number, y: number): void {
+    const an = this.h.animalAt(x, y);
+    if (!an || an.st.id !== id) return;
+    const was = an.st.petted;
+    pet(an.st);
+    const h = hearts(an.st);
+    an.showHearts(was ? 1 : Math.max(1, Math.min(3, h)));
+    const status = an.st.kind === 'cow' ? (an.st.milk ? ' · tem leite!' : '') : '';
+    bus.emit('toast', `${an.st.name} ${'♥'.repeat(h)}${'·'.repeat(5 - h)}${was ? '' : ' (carinho)'}${status}`, 'info');
+    if (!was) haptic.heart();
+  }
+
+  private doMilk(id: number, x: number, y: number): void {
+    const an = this.h.animalAt(x, y);
+    if (!an || an.st.id !== id || !an.st.milk) return;
+    const st = an.st;
+    this.h.player.startAct('water', this.toolIcon('bucket'), () => {
+      const item = st.milk === 2 ? 'big_milk' : 'milk';
+      const ql = st.aff >= 900 && Math.random() < 0.35 ? 2 : st.aff >= 600 && Math.random() < 0.5 ? 1 : 0;
+      if (addItem(item, 1, ql) > 0) { bus.emit('toast', 'Mochila cheia!', 'warn'); return; }
+      bus.emit('pickup', item, 1);
+      st.milk = 0;
+      addXp('ranching', 5);
+      an.showHearts(1);
+      haptic.harvest();
+    });
+  }
+
+  private doPick(anchor: number): void {
+    const L = this.h.loc;
+    const o = L.objs.get(anchor);
+    if (!o?.it) return;
+    if (addItem(o.it, 1, o.g ?? 0) > 0) { bus.emit('toast', 'Mochila cheia!', 'warn'); return; }
+    bus.emit('pickup', o.it, 1);
+    L.remove(anchor); this.h.view.refreshObj(anchor);
+    addXp('ranching', 3);
+    haptic.harvest();
+  }
+
+  /** Enche todos os cochos vazios com ração (1 por cocho). */
+  private doFeed(): void {
+    const L = this.h.loc;
+    let n = 0;
+    for (const [i, o] of L.objs) {
+      if (o.k !== 'trough' || o.g) continue;
+      if (!removeItem('hay', 1)) break;
+      o.g = 1; n++;
+      this.h.view.refreshObj(i);
+    }
+    if (n) bus.emit('toast', `${n} ${n > 1 ? 'cochos abastecidos' : 'cocho abastecido'} com ração.`, 'good');
+  }
+
   /** Atualiza a máscara de conexão das cercas ao redor de (x,y). */
   private updateFences(x: number, y: number): void {
     const L = this.h.loc;
@@ -690,6 +759,21 @@ export class Actions {
         return;
       }
       case 'bin': bus.emit('menu', 'ship'); return;
+      case 'trough': {
+        let full = 0, all = 0;
+        for (const o of this.h.loc.objs.values()) if (o.k === 'trough') { all++; if (o.g) full++; }
+        bus.emit('toast', `Cochos com ração: ${full}/${all}. Compre ração na loja.`, 'info');
+        return;
+      }
+      case 'coop': case 'barn': {
+        const L = this.h.loc;
+        const hit = L.objAt(x, y);
+        if (!hit) return;
+        if ((hit.o.g ?? 0) > 0) { bus.emit('toast', 'Em construção — fica pronto amanhã.', 'info'); return; }
+        const id = `${what}:${hit.i}`;
+        this.h.goTo(id, -1, -1, 1);
+        return;
+      }
       case 'down': {
         const n = (this.h.loc.extra.floor as number) ?? 0;
         if (n >= MINE_FLOORS) { bus.emit('toast', 'Este é o fundo da mina.', 'info'); return; }

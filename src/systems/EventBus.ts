@@ -20,6 +20,7 @@ export interface GameEvents {
   dialog: [DialogReq];
   summary: [import('./DayCycle').DaySummary];
   menu: [string];
+  animals: [];
 }
 export interface DialogReq { text: string; title?: string; buttons?: { label: string; act?: () => void }[]; icon?: string; }
 export type ToastKind = 'info' | 'good' | 'warn';

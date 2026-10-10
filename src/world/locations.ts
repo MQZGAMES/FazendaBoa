@@ -3,6 +3,9 @@ import { generateFarm } from './genFarm';
 import { generateHouse } from './genHouse';
 import { generateTown } from './genTown';
 import { generateMineEntrance, generateMineFloor } from './genMine';
+import { generateAnimalHouse } from './genAnimalHouse';
+import { FARM_W } from './genFarm';
+import type { BuildingKind } from '../data/animals';
 import { G } from '../state';
 
 /** Registro de mapas: como criar cada um do zero e dados estáticos (saídas, interior). */
@@ -29,6 +32,14 @@ export function getLocation(id: string): Location {
     G.locs.set(id, L);
     return L;
   }
+  const ah = /^(coop|barn):(\d+)$/.exec(id);
+  if (!L && ah) {
+    const farm = getLocation('farm');
+    const o = farm.objs.get(Number(ah[2]));
+    L = generateAnimalHouse(ah[1] as BuildingKind, Number(ah[2]), farm.w, o?.v ?? 0);
+    G.locs.set(id, L);
+    return L;
+  }
   if (!L) {
     const def = LOCATIONS[id] ?? LOCATIONS.farm;
     L = def.create(G.seed);
@@ -40,9 +51,11 @@ export function getLocation(id: string): Location {
 
 /** Dados estáticos (saídas etc.) vêm de uma geração nova; o resto vem do save. */
 /** Mapa existe no registro? (inclui andares da mina) */
-export function locationExists(id: string): boolean { return !!LOCATIONS[id] || /^mine:\d+$/.test(id); }
+export function locationExists(id: string): boolean { return !!LOCATIONS[id] || /^mine:\d+$/.test(id) || /^(coop|barn):\d+$/.test(id); }
 
 export function staticTemplate(id: string, seed: number): Location {
+  const ah = /^(coop|barn):(\d+)$/.exec(id);
+  if (ah) return generateAnimalHouse(ah[1] as BuildingKind, Number(ah[2]), FARM_W, 0);
   const def = LOCATIONS[id] ?? LOCATIONS.farm;
   return def.create(seed);
 }

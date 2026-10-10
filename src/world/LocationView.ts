@@ -58,6 +58,10 @@ export function objFrame(o: WObj, season: number): string {
     case 'rockpile': return `rockpile_${(o.g ?? 1) >= 8 ? 2 : (o.g ?? 1) >= 4 ? 1 : 0}`;
     case 'furnace': return o.m ? 'furnace_on' : 'furnace';
     case 'sprinkler': return `sprinkler_${o.t ?? 0}`;
+    case 'coop': return (o.g ?? 0) > 0 ? 'build_coop' : o.v ? 'coop_big' : 'coop';
+    case 'barn': return (o.g ?? 0) > 0 ? 'build_barn' : o.v ? 'barn_big' : 'barn';
+    case 'trough': return o.g ? 'trough_full' : 'trough';
+    case 'product': return `item_${o.it ?? 'egg'}`;
     case 'wheelbarrow': return (o.g ?? 0) > 0 ? 'wheelbarrow_full' : 'wheelbarrow';
     case 'bin': return 'bin';
     case 'fence': return `fencem_${o.v & 15}`;
@@ -68,7 +72,7 @@ export function objFrame(o: WObj, season: number): string {
 }
 
 /** Ajuste vertical (px) do sprite em relação à base do tile. */
-const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1, bed: 1, tv: 1, table: 2, chair: 1, plant: 1, lamp: 1, shelf: 1, fireplace: 0, window: -2, shop: 0, smith: 0, manor: 0, fountain: 2, bench: 1, lamppost: 1, chest: 1, sign: 1, ladderup: 2, elevator: 1, crystal: 1, torch: 1, furnace: 1, walltorch: -4, scarecrow: 2, lantern: 1, sprinkler: 1 };
+const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1, bed: 1, tv: 1, table: 2, chair: 1, plant: 1, lamp: 1, shelf: 1, fireplace: 0, window: -2, shop: 0, smith: 0, manor: 0, fountain: 2, bench: 1, lamppost: 1, chest: 1, sign: 1, ladderup: 2, elevator: 1, crystal: 1, torch: 1, furnace: 1, walltorch: -4, scarecrow: 2, lantern: 1, sprinkler: 1, coop: 0, barn: 0, product: -3 };
 
 /**
  * Renderização de um mapa: tilemap com autotiling, água animada e objetos

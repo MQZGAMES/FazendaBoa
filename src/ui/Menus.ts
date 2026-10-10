@@ -8,6 +8,8 @@ import { perf, type QualityLevel } from '../systems/Performance';
 import { bus } from '../systems/EventBus';
 import { saveGame, exportCode, exportJson, importSave, downloadFile } from '../systems/Save';
 import { G } from '../state';
+import { BUILDINGS } from '../data/animals';
+import { addItem } from '../systems/Inventory';
 
 /** Menu principal do jogo (botão de engrenagem). */
 export class GameMenu extends Modal {
@@ -22,6 +24,14 @@ export class GameMenu extends Modal {
       ['Exportar save', () => { this.hide(); void openExport(); }],
       ['Importar save', () => { this.hide(); openImport(this.onImported); }],
       ['Configurações', () => { this.hide(); this.onSettings(); }],
+      ...(G.flags.pendingBuild ? [['Cancelar obra', () => {
+        const kind = G.flags.pendingBuild === 2 ? 'barn' : 'coop';
+        const d = BUILDINGS[kind];
+        G.player.money += d.price; addItem('wood', d.wood); addItem('stone', d.stone);
+        delete G.flags.pendingBuild;
+        bus.emit('toast', 'Obra cancelada: dinheiro e materiais devolvidos.', 'info');
+        this.hide();
+      }] as [string, () => void]] : []),
       ['Tela de título', async () => { await saveGame(); this.hide(); this.onTitle(); }],
     ];
     const bh = 48, gap = 8;

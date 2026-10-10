@@ -8,6 +8,7 @@ import { addFurniture } from './furniture';
 import { addTown } from './town';
 import { addMine } from './mine';
 import { addCrafting } from './crafting';
+import { addAnimals } from './animals';
 import { addPlayer, type Appearance } from './character';
 import { buildTerrain, waterTextures, type TerrainIndex } from './terrain';
 import { buildFonts, buildTinyFont } from './font';
@@ -30,6 +31,7 @@ function mainAtlas(): AtlasBuilder {
   addTown(ab);
   addMine(ab);
   addCrafting(ab);
+  addAnimals(ab);
   return ab;
 }
 

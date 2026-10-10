@@ -6,9 +6,11 @@ import { txt, uiTex } from './widgets';
 import { G, type ItemStack } from '../state';
 import { ITEMS, MAX_STACK, itemIcon } from '../data/items';
 import { QUALITY_MULT } from '../data/crops';
-import { GENERAL_STORE, BACKPACK_SIZES, type ShopItem } from '../data/shops';
+import { GENERAL_STORE, BACKPACK_SIZES, SHOP_TABS, type ShopItem, type ShopTab } from '../data/shops';
+import { buildings, buyAnimal } from '../systems/Animals';
+import { getLocation } from '../world/locations';
 import { RECIPES, type Recipe } from '../data/recipes';
-import { addItem, countItem, canAdd } from '../systems/Inventory';
+import { addItem, countItem, canAdd, removeItem } from '../systems/Inventory';
 import { countAvailable, consume } from '../systems/Crafting';
 import { shippingBin, itemValue } from '../systems/DayCycle';
 import { skillLevel } from '../systems/Skills';
@@ -288,24 +290,44 @@ export class ShopPanel extends ListPanel<ShopItem> {
   private moneyT!: Phaser.GameObjects.BitmapText;
   private infoT!: Phaser.GameObjects.BitmapText;
   private buyB: ReturnType<Modal['button']> | null = null;
+  private tab: ShopTab = 'seeds';
+
+  /** Itens visíveis na aba atual (respeitando estação, compras únicas e construções). */
+  private available(): ShopItem[] {
+    const hasCoop = buildings('coop'), hasBarn = buildings('barn');
+    return GENERAL_STORE.filter((s) => {
+      if (s.tab !== this.tab) return false;
+      switch (s.upgrade) {
+        case 'backpack24': return G.player.inv.length < BACKPACK_SIZES[1];
+        case 'backpack36': return G.player.inv.length === BACKPACK_SIZES[1];
+        case 'coop': case 'barn': return !G.flags.pendingBuild;
+        case 'coop_up': return hasCoop.some((b) => !b.level);
+        case 'barn_up': return hasBarn.some((b) => !b.level);
+      }
+      if (s.id === 'bucket') return countItem('bucket') === 0;
+      return !s.seasons || s.seasons.includes(G.time.season);
+    });
+  }
 
   present(): void {
     this.clear();
-    this.items = GENERAL_STORE.filter((s) => {
-      if (s.upgrade === 'backpack24') return G.player.inv.length < BACKPACK_SIZES[1];
-      if (s.upgrade === 'backpack36') return G.player.inv.length === BACKPACK_SIZES[1];
-      return !s.seasons || s.seasons.includes(G.time.season);
-    });
+    this.items = this.available();
     this.sel = this.items.length ? 0 : -1;
     this.qty = 1;
     const W = Math.min(390, display.cssW - 12);
     const bottom = 176;
-    const H = Math.min(display.cssH - display.safe.top - display.safe.bottom - 40, 48 + this.items.length * this.rowH + bottom + 6);
+    const top = 100;
+    const H = Math.min(display.cssH - display.safe.top - display.safe.bottom - 40, top + Math.max(3, this.items.length) * this.rowH + bottom + 6);
     this.frame(W, H, 'parch', 20);
     this.c.add(txt(this.scene, this.px + 18, this.py + 16, 'Loja da Vila', 'dark'));
     this.moneyT = txt(this.scene, this.px + W - 18, this.py + 16, '', 'dark').setOrigin(1, 0);
     this.c.add(this.moneyT);
-    this.buildList(this.px + 14, this.py + 48, W - 28, H - 48 - bottom);
+    const tw = (W - 28 - 3 * 6) / 4;
+    SHOP_TABS.forEach((t, i) => {
+      const b = this.button(this.px + 14 + i * (tw + 6), this.py + 46, tw, 42, t.label, () => { this.tab = t.id; this.present(); });
+      if (t.id === this.tab) b.bg.setTexture(uiTex(this.scene, 'slotSel', Math.round(tw / UI), 21));
+    });
+    this.buildList(this.px + 14, this.py + top, W - 28, H - top - bottom);
     const by = this.py + H - bottom + 6;
     this.infoT = txt(this.scene, this.px + 18, by, '', 'dark', 1.5).setMaxWidth((W - 36) / 1.5);
     this.c.add(this.infoT);
@@ -322,13 +344,15 @@ export class ShopPanel extends ListPanel<ShopItem> {
   }
 
   private nameOf(s: ShopItem): string { return s.name ?? ITEMS[s.id]?.name ?? s.id; }
+  private single(s: ShopItem): boolean { return !!s.upgrade || !!s.animal || s.id === 'bucket'; }
 
   protected rowContent(s: ShopItem, x: number, y: number, w: number): Phaser.GameObjects.GameObject[] {
-    const ic = this.scene.add.image(x + 26, y + 26, 'atlas', itemIcon(s.id)).setScale(UI);
+    const ic = this.scene.add.image(x + 26, y + 26, 'atlas', s.icon ?? itemIcon(s.id)).setScale(UI * (s.animal === 'cow' ? 0.9 : 1));
     const nm = txt(this.scene, x + 52, y + 10, this.nameOf(s), 'dark', 1.5);
     const pr = txt(this.scene, x + w - 12, y + 10, `${s.price}g`, 'dark', 1.5).setOrigin(1, 0);
-    const owned = s.upgrade ? '' : `tem ${countItem(s.id)}`;
-    const ow = txt(this.scene, x + 52, y + 30, owned, 'dark', 1.2).setAlpha(0.7);
+    let sub = s.upgrade || s.animal ? '' : `tem ${countItem(s.id)}`;
+    if (s.mats) sub = Object.entries(s.mats).map(([id, n]) => `${n} ${ITEMS[id]?.name.toLowerCase() ?? id}`).join(' + ');
+    const ow = txt(this.scene, x + 52, y + 30, sub, 'dark', 1.2).setAlpha(0.7);
     if (s.price > G.player.money) pr.setAlpha(0.45);
     return [ic, nm, pr, ow];
   }
@@ -338,14 +362,14 @@ export class ShopPanel extends ListPanel<ShopItem> {
   private setQty(q: number): void {
     const s = this.items[this.sel];
     if (!s) return;
-    this.qty = s.upgrade ? 1 : Math.max(1, Math.min(999, q));
+    this.qty = this.single(s) ? 1 : Math.max(1, Math.min(999, q));
     this.refreshInfo();
   }
 
   private refreshInfo(): void {
     this.moneyT.setText(`${G.player.money}g`);
     const s = this.items[this.sel];
-    if (!s) { this.infoT.setText('Nada à venda nesta estação.'); return; }
+    if (!s) { this.infoT.setText(this.tab === 'build' && G.flags.pendingBuild ? 'Você tem uma obra para posicionar na fazenda.' : 'Nada disponível aqui no momento.'); if (this.buyB?.label) this.buyB.label.setText('Comprar'); return; }
     const d = ITEMS[s.id];
     this.qtyT.setText(String(this.qty));
     this.infoT.setText(`${this.nameOf(s)}: ${s.desc ?? d?.desc ?? ''}`);
@@ -357,6 +381,42 @@ export class ShopPanel extends ListPanel<ShopItem> {
     if (!s) return;
     const cost = s.price * this.qty;
     if (cost > G.player.money) { bus.emit('toast', 'Dinheiro insuficiente.', 'warn'); return; }
+    if (s.mats) {
+      const miss = Object.entries(s.mats).filter(([id, n]) => countItem(id) < n);
+      if (miss.length) { bus.emit('toast', `Faltam materiais: ${miss.map(([id, n]) => `${n - countItem(id)} ${ITEMS[id]?.name.toLowerCase() ?? id}`).join(', ')}.`, 'warn'); return; }
+    }
+    if (s.animal) {
+      const r = buyAnimal(s.animal);
+      if (!r.ok) { bus.emit('toast', r.msg, 'warn'); return; }
+      G.player.money -= cost;
+      bus.emit('toast', r.msg, 'good');
+      haptic.tap();
+      this.refreshInfo();
+      return;
+    }
+    if (s.upgrade === 'coop' || s.upgrade === 'barn') {
+      for (const [id, n] of Object.entries(s.mats ?? {})) removeItem(id, n);
+      G.player.money -= cost;
+      G.flags.pendingBuild = s.upgrade === 'barn' ? 2 : 1;
+      bus.emit('toast', `${this.nameOf(s)} encomendado! Escolha o local na fazenda.`, 'good');
+      haptic.upgrade();
+      this.present();
+      return;
+    }
+    if (s.upgrade === 'coop_up' || s.upgrade === 'barn_up') {
+      const kind = s.upgrade === 'coop_up' ? 'coop' : 'barn';
+      const b = buildings(kind).find((x) => !x.level);
+      if (!b) return;
+      for (const [id, n] of Object.entries(s.mats ?? {})) removeItem(id, n);
+      G.player.money -= cost;
+      const farm = getLocation('farm');
+      const o = farm.objs.get(b.anchor);
+      if (o) { o.v = 1; o.g = 1; farm.rev++; }
+      bus.emit('toast', `${this.nameOf(s)}: a obra fica pronta amanhã!`, 'good');
+      haptic.upgrade();
+      this.present();
+      return;
+    }
     if (s.upgrade) {
       const target = s.upgrade === 'backpack24' ? BACKPACK_SIZES[1] : BACKPACK_SIZES[2];
       while (G.player.inv.length < target) G.player.inv.push(null);
@@ -373,6 +433,7 @@ export class ShopPanel extends ListPanel<ShopItem> {
     G.player.money -= s.price * bought;
     bus.emit('toast', `Comprou ${bought}x ${this.nameOf(s)}.`, 'good');
     haptic.tap();
+    if (s.id === 'bucket') { this.present(); return; }
     this.renderRows();
     this.refreshInfo();
   }

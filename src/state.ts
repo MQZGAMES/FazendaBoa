@@ -28,6 +28,21 @@ export interface PlayerState {
 
 export interface TimeState { day: number; season: number; year: number; min: number; }
 
+/** Animal da fazenda (salvo). */
+export interface AnimalState {
+  id: number;
+  kind: 'chicken' | 'cow';
+  name: string;
+  v: number;          // variação de cor
+  home: number;       // âncora da construção na fazenda
+  loc: string;        // mapa atual
+  x: number; y: number;
+  aff: number;        // afeição 0..1000
+  petted: number;     // recebeu carinho hoje
+  outside: number;    // passou o dia no pasto (comeu grama)
+  milk: number;       // 0 nada, 1 leite, 2 leite grande (vaca)
+}
+
 export interface GameState {
   seed: number;
   player: PlayerState;
@@ -35,6 +50,7 @@ export interface GameState {
   weather: { today: Weather; tomorrow: Weather };
   locs: Map<string, Location>;
   flags: Record<string, number>;
+  animals: AnimalState[];
 }
 export type Weather = 'sun' | 'cloud' | 'rain' | 'storm' | 'snow';
 
@@ -63,6 +79,7 @@ export function newGameState(seed = (Math.random() * 1e9) | 0): GameState {
     weather: { today: 'sun', tomorrow: 'sun' },
     locs: new Map(),
     flags: {},
+    animals: [],
   };
 }
 

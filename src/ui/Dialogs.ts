@@ -54,7 +54,7 @@ export class Summary extends Modal {
     this.dim.setAlpha(1);
     const W = Math.min(360, display.cssW - 20);
     const lines = s.shipped.slice(0, 8);
-    const h = 150 + lines.length * 34 + (s.passedOut ? 50 : 0) + (s.died ? 30 : 0) + (s.crow ? 30 : 0) + 60;
+    const h = 150 + lines.length * 34 + (s.passedOut ? 50 : 0) + (s.died ? 30 : 0) + (s.crow ? 30 : 0) + s.notes.length * 30 + 60;
     this.frame(W, h, 'parch', Math.max(40, (display.cssH - h) / 2));
     const t = G.time;
     let y = this.py + 18;
@@ -84,6 +84,7 @@ export class Summary extends Modal {
       this.c.add(txt(this.scene, this.px + 20, y, 'Nada foi vendido ontem.', 'dark', 1.5));
       y += 30;
     }
+    for (const n of s.notes) { this.c.add(txt(this.scene, this.px + 20, y, n, 'dark', 1.5).setMaxWidth((W - 40) / 1.5)); y += 30; }
     if (s.crow) { this.c.add(txt(this.scene, this.px + 20, y, 'Um corvo comeu uma plantação! Use espantalhos.', 'dark', 1.5).setMaxWidth((W - 40) / 1.5)); y += 30; }
     if (s.died) { this.c.add(txt(this.scene, this.px + 20, y, `${s.died} plantas morreram (fora da estação).`, 'dark', 1.5).setMaxWidth((W - 40) / 1.5)); y += 30; }
     this.button(this.px + W / 2 - 80, this.py + h - 62, 160, 48, 'Continuar', () => this.finish());

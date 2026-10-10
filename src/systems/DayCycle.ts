@@ -9,6 +9,7 @@ import { bus } from './EventBus';
 import { ITEMS } from '../data/items';
 import { QUALITY_MULT } from '../data/crops';
 import { SPRINKLER_AREA, SCARECROW_RADIUS, CROW_CHANCE } from '../data/objects';
+import { animalsEndDay } from './Animals';
 
 export interface ShipLine { id: string; q: number; ql: number; total: number; }
 export interface DaySummary {
@@ -19,6 +20,7 @@ export interface DaySummary {
   died: number;
   late: boolean;
   crow: boolean;
+  notes: string[];
 }
 
 /** Previsão para amanhã conforme a estação. */
@@ -97,6 +99,7 @@ export function endDay(passOut: boolean, penalize = true): DaySummary {
   }
   spawnDebris();
   const crow = crowAttack();
+  const notes = animalsEndDay();
 
   // energia
   const p = G.player;
@@ -105,7 +108,7 @@ export function endDay(passOut: boolean, penalize = true): DaySummary {
   G.flags.daysPlayed = (G.flags.daysPlayed ?? 0) + 1;
   bus.emit('day');
   bus.emit('money', G.player.money);
-  return { passedOut: passOut, penalty, shipped, total, died, late, crow };
+  return { passedOut: passOut, penalty, shipped, total, died, late, crow, notes };
 }
 
 /** Irrigadores regam automaticamente às 6:00. */

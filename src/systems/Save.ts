@@ -7,7 +7,7 @@ import type { WObj } from '../data/objects';
 import { GAME_VERSION } from '../config';
 
 /** Versão do esquema do save; adicione migrações em MIGRATIONS. */
-export const SAVE_SCHEMA = 2;
+export const SAVE_SCHEMA = 3;
 const KEY = 'save:main';
 const BACKUP = 'save:backup';
 
@@ -22,6 +22,7 @@ export interface SaveFile {
   weather: GameState['weather'];
   flags: GameState['flags'];
   locs: LocSave[];
+  animals: GameState['animals'];
 }
 
 /* ---------- codificação ---------- */
@@ -46,7 +47,7 @@ export function serialize(st: GameState = G): SaveFile {
   }
   return {
     schema: SAVE_SCHEMA, version: GAME_VERSION, savedAt: Date.now(), seed: st.seed,
-    player: st.player, time: st.time, weather: st.weather, flags: st.flags, locs,
+    player: st.player, time: st.time, weather: st.weather, flags: st.flags, locs, animals: st.animals,
   };
 }
 
@@ -54,6 +55,8 @@ export function serialize(st: GameState = G): SaveFile {
 const MIGRATIONS: Record<number, (s: SaveFile) => SaveFile> = {
   // 1 → 2: a fazenda virou ilha (mar nas bordas sem saída)
   1: (s) => ({ ...s, schema: 2, flags: { ...s.flags, needIsland: 1 } }),
+  // 2 → 3: animais
+  2: (s) => ({ ...s, schema: 3, animals: [] }),
 };
 
 export function validate(raw: unknown): SaveFile | null {
@@ -77,6 +80,7 @@ export function deserialize(s: SaveFile): GameState {
   st.time = { ...st.time, ...s.time };
   st.weather = { ...st.weather, ...s.weather };
   st.flags = { ...s.flags };
+  st.animals = Array.isArray(s.animals) ? s.animals : [];
   for (const ls of s.locs) {
     const ver = LOCATIONS[ls.id]?.version;
     if (ver && (ls.extra?.ver ?? 0) !== ver) continue; // layout mudou: será recriado

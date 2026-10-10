@@ -27,6 +27,10 @@ jogo original). Sem áudio nesta versão.
 - **Fabricar (martelo):** receitas liberam com níveis de habilidade e contam ingredientes de baús próximos.
   Irrigadores regam às 6:00 (prévia da área ao posicionar); espantalho protege num raio de 8 contra corvos;
   caminho de pedra dá +10% de velocidade (remova com a picareta); cercas se conectam sozinhas.
+- **Animais:** na loja (aba Obras) compre galinheiro/celeiro e escolha o local na fazenda (fantasma verde =
+  válido; toque em ação). Fica pronto no dia seguinte. Compre galinhas/vacas na aba Animais, ração e balde em Itens.
+  Ponha ração no cocho (enche todos de uma vez), faça carinho todo dia e colete ovos e leite (balde).
+  Em dias de sol eles pastam lá fora (grama substitui a ração) e voltam às 18:00.
 - **Energia:** ao zerar, você ainda age, mas desmaia em 5 minutos (cronômetro no topo) — coma algo ou durma.
 - **Save:** automático ao dormir e ao sair. Menu (engrenagem) → Exportar/Importar save (código ou .json).
 - **Debug:** toque 5 vezes no relógio (no dev ou com `?debug` na URL).
@@ -40,7 +44,7 @@ Dica: no iPhone, use *Compartilhar → Adicionar à Tela de Início* para tela c
 - [x] Fase 3 — Vila, loja, caixa de envio, mochila (12→24→36), baús e fabricação básica
 - [x] Fase 4 — Árvores, mina (40 andares, elevador, gemas, lago no 20), fornalha e carregar pedras
 - [x] Fase 5 — Crafting: irrigadores (3 níveis), espantalho e corvos, cercas, caminho de pedra, tochas, lampião, carrinho de mão, isca
-- [ ] Fase 6 — Galinhas, vacas e construções
+- [x] Fase 6 — Galinheiro e celeiro (com ampliação), galinhas e vacas, ração, ovos, leite e afeição
 - [ ] Fase 7 — Pesca
 - [ ] Fase 8 — Cavalo e ferreiro
 - [ ] Fase 9 — Produtos artesanais

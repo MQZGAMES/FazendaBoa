@@ -4,6 +4,7 @@ import { bus } from './systems/EventBus';
 import { perf } from './systems/Performance';
 import { saveGame } from './systems/Save';
 import { G } from './state';
+import { input } from './systems/Input';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { WorldScene } from './scenes/WorldScene';
@@ -68,10 +69,11 @@ document.addEventListener('dblclick', (e) => e.preventDefault());
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
-declare global { interface Window { __game?: Phaser.Game; __snap?: (name: string, steps?: number, crop?: [number, number, number, number]) => Promise<string>; __sheet?: (name: string, frames: string[], tex?: string, scale?: number) => Promise<string>; __G?: () => typeof G; } }
+declare global { interface Window { __game?: Phaser.Game; __snap?: (name: string, steps?: number, crop?: [number, number, number, number]) => Promise<string>; __sheet?: (name: string, frames: string[], tex?: string, scale?: number) => Promise<string>; __G?: () => typeof G; __input?: typeof input; } }
 if (import.meta.env.DEV) {
   window.__game = game;
   window.__G = () => G;
+  window.__input = input;
   /** Avança N quadros manualmente e envia uma captura para .snaps/<name>.png (pane oculto não renderiza). */
   window.__snap = (name: string, steps = 2, crop?: [number, number, number, number]) => new Promise((resolve) => {
     let t = performance.now();

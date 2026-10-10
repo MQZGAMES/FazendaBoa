@@ -5,7 +5,8 @@ export type ObjKind =
   | 'bed' | 'tv' | 'table' | 'chair' | 'rug' | 'fireplace' | 'window' | 'plant' | 'lamp' | 'shelf'
   | 'shop' | 'smith' | 'manor' | 'fountain' | 'bench' | 'lamppost' | 'flowerbed' | 'sign' | 'chest'
   | 'ladder' | 'ladderup' | 'elevator' | 'crystal' | 'walltorch' | 'torch' | 'furnace' | 'bigrock' | 'rockpile' | 'minecart'
-  | 'sprinkler' | 'scarecrow' | 'lantern' | 'wheelbarrow';
+  | 'sprinkler' | 'scarecrow' | 'lantern' | 'wheelbarrow'
+  | 'coop' | 'barn' | 'trough' | 'product';
 
 export type ToolKind = 'hoe' | 'can' | 'axe' | 'pickaxe' | 'scythe' | 'rod' | 'bucket';
 
@@ -21,6 +22,8 @@ export interface WObj {
   s?: 1;            // árvore virou toco
   a?: number;       // idade em dias (mudas)
   inv?: (ItemStack | null)[]; // conteúdo (baús)
+  /** item representado (produtos no chão, ex.: ovo) */
+  it?: string;
   /** máquina trabalhando: produto, quantidade e minuto absoluto em que fica pronto */
   m?: { out: string; q: number; until: number };
 }
@@ -99,6 +102,10 @@ export const OBJ: Record<ObjKind, ObjDef> = {
   scarecrow: { name: 'Espantalho', solid: true, size: [1, 1], item: 'scarecrow' },
   lantern: { name: 'Lampião', solid: true, size: [1, 1], item: 'lantern', light: 96, lightColor: 0xffd27a },
   wheelbarrow: { name: 'Carrinho de mão', solid: true, size: [1, 1], item: 'wheelbarrow' },
+  coop: { name: 'Galinheiro', solid: true, size: [5, 3], door: { dx: [2], dy: 2, act: 'coop' } },
+  barn: { name: 'Celeiro', solid: true, size: [7, 4], door: { dx: [3], dy: 3, act: 'barn' } },
+  trough: { name: 'Cocho', solid: true, size: [1, 1] },
+  product: { name: 'Produto', solid: false, size: [1, 1], flat: true },
 };
 
 /** Área dos irrigadores (seção 14): raio em tiles e se inclui diagonais. */
