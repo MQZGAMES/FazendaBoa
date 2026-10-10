@@ -1,7 +1,7 @@
 import { OBJ, type WObj } from '../data/objects';
 
 /** Tipos de terreno base. */
-export enum T { Grass = 0, Dirt = 1, Water = 2, Floor = 3, Wall = 4, Void = 5, Stone = 6 }
+export enum T { Grass = 0, Dirt = 1, Water = 2, Floor = 3, Wall = 4, Void = 5, Stone = 6, Cave = 7, Rock = 8 }
 
 /** Plantação num tile arado. */
 export interface Crop { id: string; age: number; stage: number; regrow?: number; dead?: 1; ql?: number; }
@@ -46,7 +46,7 @@ export class Location {
   /** Recalcula colisão de um tile. */
   refreshSolid(i: number): void {
     const t = this.terrain[i];
-    let s = t === T.Water || t === T.Wall || t === T.Void ? 1 : 0;
+    let s = t === T.Water || t === T.Wall || t === T.Void || t === T.Rock ? 1 : 0;
     const o = this.occ[i];
     if (o) {
       const obj = this.objs.get(o - 1);
@@ -87,7 +87,8 @@ export class Location {
       const xx = x + i, yy = y + j;
       if (!this.inb(xx, yy) || this.occ[yy * this.w + xx]) return false;
       const t = this.terrain[yy * this.w + xx];
-      if (t === T.Water || t === T.Void || (t === T.Wall && !onWall)) return false;
+      if (t === T.Water || t === T.Void) return false;
+      if ((t === T.Wall || t === T.Rock) !== onWall) return false;
     }
     return true;
   }

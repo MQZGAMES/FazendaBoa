@@ -447,3 +447,26 @@ export class CraftPanel extends ListPanel<Recipe> {
 }
 
 export { transfer, MAX_STACK, QUALITY_MULT };
+
+/* ---------- Elevador da mina ---------- */
+export class ElevatorPanel extends Modal {
+  present(go: (floor: number) => void): void {
+    this.clear();
+    const deepest = G.flags.mineDeepest ?? 0;
+    const floors = [0];
+    for (let f = 5; f <= deepest; f += 5) floors.push(f);
+    const W = Math.min(360, display.cssW - 16);
+    const cols = 4, bw = Math.floor((W - 32 - (cols - 1) * 8) / cols), bh = 46;
+    const rows = Math.ceil(floors.length / cols);
+    const h = 70 + rows * (bh + 8) + 66;
+    this.frame(W, h, 'parch', 80);
+    this.c.add(txt(this.scene, this.px + 18, this.py + 16, 'Elevador', 'dark'));
+    this.c.add(txt(this.scene, this.px + W - 18, this.py + 20, 'a cada 5 andares', 'dark', 1.5).setOrigin(1, 0));
+    floors.forEach((f, i) => {
+      const x = this.px + 16 + (i % cols) * (bw + 8), y = this.py + 54 + Math.floor(i / cols) * (bh + 8);
+      this.button(x, y, bw, bh, f === 0 ? 'Saída' : String(f), () => { this.hide(); go(f); });
+    });
+    this.button(this.px + W / 2 - 70, this.py + h - 58, 140, 46, 'Fechar', () => this.hide());
+    this.show();
+  }
+}

@@ -143,6 +143,48 @@ const stoneStyle = (g: GrassPal, season: number): Styler => (d, x, y, dir, jit) 
   return cobble(x, y, season === 3);
 };
 
+/* ---------- Caverna (mina) ---------- */
+const CAVE = [rgb('#3e3430'), rgb('#4e4239'), rgb('#5e5045'), rgb('#6e5f52'), rgb('#806f60')];
+const ROCK = [rgb('#16121a'), rgb('#221c26'), rgb('#2e2632'), rgb('#3c3240'), rgb('#4e4452')];
+function cavePixel(x: number, y: number, seed: number): Color {
+  const h = hash2(x, y, seed);
+  const n = valueNoise(x / 4, y / 4, seed + 3, 4);
+  let c = n > 0.62 ? CAVE[3] : n < 0.32 ? CAVE[1] : CAVE[2];
+  if (h < 0.05) c = CAVE[0]; else if (h > 0.965) c = CAVE[4];
+  return c;
+}
+function caveTile(v: number): PixelCanvas {
+  const pc = new PixelCanvas(16, 16);
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) pc.set(x, y, cavePixel(x, y, 300 + v));
+  const rng = new Rng(400 + v);
+  for (let k = 0; k < 2 + (v % 3); k++) {
+    const x = rng.int(2, 13), y = rng.int(2, 13);
+    pc.set(x, y, CAVE[4]); pc.set(x + 1, y, CAVE[3]); pc.set(x, y + 1, CAVE[0]); pc.set(x + 1, y + 1, CAVE[0]);
+  }
+  if (v === 4) { pc.line(3, 5, 7, 8, CAVE[0]); pc.line(7, 8, 11, 7, CAVE[0]); }
+  return pc;
+}
+/** Parede de rocha: topo escuro; onde o piso fica embaixo aparece a face do penhasco. */
+const rockStyle: Styler = (d, x, y, dir, jit) => {
+  if (d === 0) return cavePixel(x, y, 300);
+  const faceH = 6 + jit;
+  if (dir === 1 && d <= faceH) {
+    // face vertical voltada para o jogador
+    if (d === 1) return CAVE[0];
+    const t = d / faceH;
+    let c = t < 0.35 ? rgb('#5a4c48') : t < 0.7 ? rgb('#4a3e3c') : rgb('#3a302e');
+    if ((x * 3 + Math.floor(y / 2)) % 7 === 0) c = rgb('#2a2222');
+    if (d === faceH) c = ROCK[4];
+    return c;
+  }
+  if (d === 1) return dir === 0 ? ROCK[4] : ROCK[0];
+  const h = hash2(x, y, 88), n = valueNoise(x / 5, y / 5, 89, 3.2);
+  let c = n > 0.6 ? ROCK[3] : n < 0.3 ? ROCK[1] : ROCK[2];
+  if (h > 0.97) c = ROCK[4];
+  return c;
+};
+const caveLand: GrassPal = { g0: CAVE[0], g1: CAVE[1], g2: CAVE[2], g3: CAVE[3], g4: CAVE[4] };
+
 const WSHADOW = withAlpha(rgb('#0c2348'), 120);
 const WSHADOW2 = withAlpha(rgb('#0c2348'), 60);
 const FOAM = withAlpha(P.foam, 190);
@@ -272,6 +314,9 @@ export interface TerrainIndex {
   dirt: number[];
   water: number[];
   stone: number[];
+  cave: number[];
+  rock: number;
+  waterCave: number;
   soil: number;
   soilWet: number;
   floor: number[];
@@ -288,7 +333,7 @@ export interface TerrainBuild { canvas: HTMLCanvasElement; index: TerrainIndex; 
 export function buildTerrain(): TerrainBuild {
   const tiles: PixelCanvas[] = [];
   const push = (pc: PixelCanvas) => { tiles.push(pc); return tiles.length - 1; };
-  const index: TerrainIndex = { grass: [], dirt: [], water: [], stone: [], soil: 0, soilWet: 0, floor: [], wallTop: 0, wallMid: 0, wallBase: 0, black: 0 };
+  const index: TerrainIndex = { grass: [], dirt: [], water: [], stone: [], cave: [], rock: 0, waterCave: 0, soil: 0, soilWet: 0, floor: [], wallTop: 0, wallMid: 0, wallBase: 0, black: 0 };
   for (let s = 0; s < 4; s++) {
     const g = GRASS[s];
     index.grass.push([]);
@@ -300,6 +345,11 @@ export function buildTerrain(): TerrainBuild {
     index.stone.push(tiles.length);
     for (const m of AUTO_MASKS) push(autoTile(m, 3, stoneStyle(g, s)));
   }
+  for (let v = 0; v < 6; v++) index.cave.push(push(caveTile(v)));
+  index.rock = tiles.length;
+  for (const m of AUTO_MASKS) push(autoTile(m, 4, rockStyle));
+  index.waterCave = tiles.length;
+  for (const m of AUTO_MASKS) push(autoTile(m, 5, waterStyle(caveLand, 3)));
   index.soil = tiles.length;
   for (const m of AUTO_MASKS) push(autoTile(m, 3, soilStyle(false)));
   index.soilWet = tiles.length;

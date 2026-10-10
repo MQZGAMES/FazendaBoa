@@ -34,6 +34,8 @@ export class Player {
   readonly shadow: Phaser.GameObjects.Image;
   readonly tool: Phaser.GameObjects.Image;
   readonly sweat: Phaser.GameObjects.Image;
+  /** pedra carregada acima da cabeça */
+  readonly carried: Phaser.GameObjects.Image;
   x: number;
   y: number;
   dir: Dir4 = 0;
@@ -57,6 +59,7 @@ export class Player {
     this.sprite = scene.add.sprite(x, y, 'player', FRAMES.idle[0][0]).setOrigin(0.5, 31 / 32);
     this.tool = scene.add.image(0, 0, 'atlas', 'tool_hoe_0').setVisible(false);
     this.sweat = scene.add.image(0, 0, 'atlas', 'sweat').setVisible(false);
+    this.carried = scene.add.image(0, 0, 'atlas', 'bigrock').setOrigin(0.5, 1).setVisible(false);
     this.applyFrame();
   }
 
@@ -211,6 +214,8 @@ export class Player {
     this.sprite.setPosition(this.x, this.y + 1);
     this.sprite.setDepth(this.y);
     this.shadow.setPosition(this.x, this.y);
+    this.carried.setVisible(this.carrying);
+    if (this.carrying) this.carried.setPosition(this.x, this.y - 27 + (this.anim === 'carry' && this.frame % 3 !== 0 ? -1 : 0)).setDepth(this.y + 0.6);
     if (this.act && this.act.toolFrame) this.placeTool(DIRS[this.dir], flip);
   }
 

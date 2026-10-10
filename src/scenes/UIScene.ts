@@ -18,7 +18,7 @@ import { Dialog, Summary, Pickups } from '../ui/Dialogs';
 import { GameMenu, SettingsPanel } from '../ui/Menus';
 import { topModal, anyModal } from '../ui/Modal';
 import { InventoryPanel } from '../ui/InventoryPanel';
-import { ShipPanel, ChestPanel, ShopPanel, CraftPanel } from '../ui/Panels';
+import { ShipPanel, ChestPanel, ShopPanel, CraftPanel, ElevatorPanel } from '../ui/Panels';
 
 interface SecBtn { id: string; icon: string; bg: Phaser.GameObjects.Image; ic: Phaser.GameObjects.Image; x: number; y: number; r: number; visible: boolean; }
 
@@ -40,6 +40,7 @@ export class UIScene extends Phaser.Scene {
   private chest!: ChestPanel;
   private shop!: ShopPanel;
   private craft!: CraftPanel;
+  private elevator!: ElevatorPanel;
   private pickups!: Pickups;
   private actBg!: Phaser.GameObjects.Image;
   private actIcon!: Phaser.GameObjects.Image;
@@ -79,6 +80,7 @@ export class UIScene extends Phaser.Scene {
     this.chest = new ChestPanel(this);
     this.shop = new ShopPanel(this);
     this.craft = new CraftPanel(this);
+    this.elevator = new ElevatorPanel(this);
     this.settingsPanel = new SettingsPanel(this, () => { this.joy.applySize(); this.layout(); });
     this.menu = new GameMenu(this, () => this.settingsPanel.present(), () => this.toTitle(), () => this.reloadWorld());
     this.actBg = this.add.image(0, 0, 'atlas', 'ui_btn_round').setScale(UI).setDepth(10);
@@ -280,6 +282,10 @@ export class UIScene extends Phaser.Scene {
       case 'craft': this.craft.present(); break;
       case 'ship': this.ship.present(); break;
       case 'shop': this.shop.present(); break;
+      case 'elevator': this.elevator.present((f) => {
+        const w = this.scene.get('World') as unknown as { goTo: (l: string, x: number, y: number, d: 0 | 1 | 2 | 3) => void };
+        if (f === 0) w.goTo('mine', 15 * 16 + 8, 6 * 16 + 13, 0); else w.goTo(`mine:${f}`, -1, -1, 0);
+      }); break;
       case 'map': bus.emit('toast', `Fazenda ${G.player.farm} — o mapa chega com a vila.`, 'info'); break;
       case 'menu': this.menu.present(); break;
       case 'settings': this.settingsPanel.present(); break;

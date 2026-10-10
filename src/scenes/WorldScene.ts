@@ -7,7 +7,7 @@ import { G, DAY_START } from '../state';
 import { TILE, MAX_DT } from '../config';
 import { Player } from '../entities/Player';
 import { LocationView } from '../world/LocationView';
-import { getLocation, LOCATIONS } from '../world/locations';
+import { getLocation, locationExists } from '../world/locations';
 
 /** Portas que abrem ao empurrar. */
 const OBJ_DOOR_ACTS = new Set(['door', 'shop', 'smith', 'manor']);
@@ -22,6 +22,7 @@ import { Actions, type WorldHost } from '../world/Actions';
 import { endDay } from '../systems/DayCycle';
 import type { UIScene } from './UIScene';
 import { perf } from '../systems/Performance';
+import { Lighting } from '../systems/Lighting';
 
 /** Cores de "color grading" por hora (multiplicativo). */
 const GRADE: [number, number, number, number][] = [
@@ -54,6 +55,7 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
   private kbMoving = false;
   private doorPush = 0;
   private gradeColor = 0xffffff;
+  private lighting!: Lighting;
 
   constructor() { super('World'); }
 
@@ -64,10 +66,18 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     this.loc = getLocation(G.player.loc);
     this.view = new LocationView(this, this.loc, G.time.season);
     if (G.flags.newGame) { G.player.loc = 'farm'; G.player.x = FARM_SPAWN.x; G.player.y = FARM_SPAWN.y; G.player.dir = 0; delete G.flags.newGame; this.loc = getLocation('farm'); }
+    const sp = this.loc.extra.spawn as [number, number] | undefined;
+    if (sp && G.player.x < 0) { G.player.x = sp[0]; G.player.y = sp[1]; }
+    if (sp && this.loc.isSolid(Math.floor(G.player.x / TILE), Math.floor((G.player.y - 2) / TILE))) { G.player.x = sp[0]; G.player.y = sp[1]; }
     if (G.player.x <= 0 || G.player.x >= this.loc.w * TILE || G.player.y >= this.loc.h * TILE) {
       if (this.loc.id === 'house') { G.player.x = HOUSE_WAKE.x; G.player.y = HOUSE_WAKE.y; } else { G.player.x = FARM_SPAWN.x; G.player.y = FARM_SPAWN.y; }
     }
     this.player = new Player(this, G.player.x, G.player.y, G.player.dir);
+    this.player.carrying = !!G.flags.carry;
+    this.lighting = new Lighting(this);
+    const floor = this.loc.extra.floor as number | undefined;
+    this.lighting.darkness = floor === undefined ? 0 : floor === 0 ? 0.5 : Math.min(0.93, 0.8 + floor * 0.003);
+    if (floor) this.time.delayedCall(350, () => bus.emit('toast', `Mina — andar ${floor}`, 'info'));
     this.parts = new Particles(this);
     this.drops = new Drops(this);
     this.drops.restore(this.loc);
@@ -86,6 +96,7 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
       bus.off('resize', this.onResize, this); bus.off('day', this.onDayChanged, this); bus.off('debug', this.onDebugDay, this);
       this.drops.persist(this.loc);
       this.view.destroy();
+      this.lighting.destroy();
       this.corners = [];
       this.rain = null;
     });
@@ -202,6 +213,12 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     if (!input.locked) this.updateActions();
     this.checkExits(dt);
     this.updateAtmosphere(dt, view);
+    if (this.lighting.darkness > 0) {
+      this.lighting.begin();
+      this.lighting.add(p.x, p.y - 10, this.loc.id === 'mine' ? 90 : 78, 0xfff0c0, 0);
+      this.view.collectLights(this.lighting);
+      this.lighting.render(view, dt);
+    }
     this.drawCollision();
     input.tapPending = false;
     consumeEdges();
@@ -295,7 +312,7 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     } else this.doorPush = 0;
     const e = this.loc.exitAt(p.tx, p.ty);
     if (!e || this.exitCooldown > 0) return;
-    if (LOCATIONS[e.to]) { this.goTo(e.to, e.tx, e.ty, p.dir); return; }
+    if (locationExists(e.to)) { this.goTo(e.to, e.tx, e.ty, p.dir); return; }
     this.exitCooldown = 2.5;
     bus.emit('toast', `${e.label}: caminho ainda em obras!`, 'warn');
   }

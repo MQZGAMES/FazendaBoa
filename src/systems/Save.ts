@@ -41,6 +41,7 @@ function unb64(s: string): Uint8Array {
 export function serialize(st: GameState = G): SaveFile {
   const locs: LocSave[] = [];
   for (const L of st.locs.values()) {
+    if (L.id.startsWith('mine:')) continue;
     locs.push({ id: L.id, w: L.w, h: L.h, terrain: b64(L.terrain), soil: b64(L.soil), objs: [...L.objs.entries()], crops: [...L.crops.entries()], extra: L.extra });
   }
   return {

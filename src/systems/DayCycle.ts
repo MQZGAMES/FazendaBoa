@@ -77,6 +77,8 @@ export function endDay(passOut: boolean, penalize = true): DaySummary {
   if (season === 3 && G.weather.today === 'rain') G.weather.today = 'snow';
   if (season !== 3 && G.weather.today === 'snow') G.weather.today = 'rain';
 
+  // andares da mina são refeitos a cada dia
+  for (const k of [...G.locs.keys()]) if (k.startsWith('mine:')) G.locs.delete(k);
   let died = 0;
   for (const L of G.locs.values()) {
     const r = growDay(L, season);
@@ -114,7 +116,8 @@ function spawnDebris(): void {
     if (Math.abs(x - 39) < 9 && y < 22) continue; // arredores da casa
     const r = rng.next();
     if (r < 0.55 && G.time.season !== 3) L.place(x, y, { k: 'weed', v: rng.int(0, 2), hp: 1 });
-    else if (r < 0.8) L.place(x, y, { k: 'stone', v: rng.int(0, 1), hp: 1 });
+    else if (r < 0.75) L.place(x, y, { k: 'stone', v: rng.int(0, 1), hp: 1 });
+    else if (r < 0.82) L.place(x, y, { k: 'bigrock', v: 0, hp: 2 });
     else L.place(x, y, { k: 'twig', v: rng.int(0, 1), hp: 1 });
   }
 }

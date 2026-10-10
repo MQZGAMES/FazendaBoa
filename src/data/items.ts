@@ -1,5 +1,6 @@
 import type { ToolKind, ObjKind } from './objects';
 import { CROPS } from './crops';
+import { MINERALS } from './mine';
 
 export type ItemCat = 'tool' | 'seed' | 'crop' | 'resource' | 'food' | 'artisan' | 'fish' | 'mineral' | 'craft' | 'animal';
 
@@ -41,7 +42,13 @@ export const ITEMS: Record<string, ItemDef> = {
   fertilizer: { id: 'fertilizer', name: 'Fertilizante básico', cat: 'craft', price: 2, icon: 'item_fertilizer', desc: 'Use no solo arado antes de plantar: melhora a qualidade da colheita.' },
   chest: { id: 'chest', name: 'Baú', cat: 'craft', price: 0, icon: 'item_chest', place: 'chest', desc: 'Coloque no chão para guardar 36 itens.' },
   backpack: { id: 'backpack', name: 'Mochila', cat: 'craft', price: 0, icon: 'item_backpack' },
+  torch: { id: 'torch', name: 'Tocha', cat: 'craft', price: 5, icon: 'item_torch', place: 'torch', desc: 'Ilumina à noite e na mina.' },
+  furnace: { id: 'furnace', name: 'Fornalha', cat: 'craft', price: 0, icon: 'item_furnace', place: 'furnace', desc: '5 minérios + 1 carvão = 1 barra (30 min).' },
 };
+for (const [id, m] of Object.entries(MINERALS)) {
+  const bar = id.endsWith('_bar');
+  ITEMS[id] = { id, name: m.name, cat: bar ? 'resource' : 'mineral', price: m.price, icon: `item_${id}`, desc: bar ? 'Usada em fabricação e melhorias de ferramentas.' : id.endsWith('_ore') ? 'Funda 5 na fornalha (com 1 carvão).' : id === 'coal' ? 'Combustível da fornalha.' : 'Uma pedra preciosa.' };
+}
 
 /** Sementes de árvore → tipo de árvore. */
 export const TREE_SEEDS: Record<string, number> = { acorn: 0, maple_seed: 1, pinecone: 2 };

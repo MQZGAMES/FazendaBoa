@@ -3,7 +3,8 @@ export type ObjKind =
   | 'weed' | 'stone' | 'twig' | 'stump' | 'tree' | 'sapling' | 'boulder' | 'tallgrass' | 'flowers' | 'bush'
   | 'house' | 'bin' | 'fence' | 'mailbox' | 'ore'
   | 'bed' | 'tv' | 'table' | 'chair' | 'rug' | 'fireplace' | 'window' | 'plant' | 'lamp' | 'shelf'
-  | 'shop' | 'smith' | 'manor' | 'fountain' | 'bench' | 'lamppost' | 'flowerbed' | 'sign' | 'chest';
+  | 'shop' | 'smith' | 'manor' | 'fountain' | 'bench' | 'lamppost' | 'flowerbed' | 'sign' | 'chest'
+  | 'ladder' | 'ladderup' | 'elevator' | 'crystal' | 'walltorch' | 'torch' | 'furnace' | 'bigrock' | 'rockpile' | 'minecart';
 
 export type ToolKind = 'hoe' | 'can' | 'axe' | 'pickaxe' | 'scythe' | 'rod' | 'bucket';
 
@@ -19,6 +20,8 @@ export interface WObj {
   s?: 1;            // árvore virou toco
   a?: number;       // idade em dias (mudas)
   inv?: (ItemStack | null)[]; // conteúdo (baús)
+  /** máquina trabalhando: produto, quantidade e minuto absoluto em que fica pronto */
+  m?: { out: string; q: number; until: number };
 }
 
 export interface ObjDef {
@@ -40,6 +43,10 @@ export interface ObjDef {
   door?: { dx: number[]; dy: number; act: string };
   /** item que vira ao ser recolhido */
   item?: string;
+  /** emite luz (raio em px) */
+  light?: number;
+  /** cor da luz (0xRRGGBB) */
+  lightColor?: number;
 }
 
 export const OBJ: Record<ObjKind, ObjDef> = {
@@ -77,6 +84,16 @@ export const OBJ: Record<ObjKind, ObjDef> = {
   flowerbed: { name: 'Canteiro', solid: true, size: [1, 1] },
   sign: { name: 'Placa', solid: true, size: [1, 1] },
   chest: { name: 'Baú', solid: true, size: [1, 1], item: 'chest' },
+  ladder: { name: 'Escada (descer)', solid: true, size: [1, 1], flat: true },
+  ladderup: { name: 'Escada (subir)', solid: true, size: [1, 1] },
+  elevator: { name: 'Elevador', solid: true, size: [2, 1], light: 40, lightColor: 0xffd27a },
+  crystal: { name: 'Cristal', solid: true, size: [1, 1], tool: 'pickaxe', hp: 2, light: 44 },
+  walltorch: { name: 'Tocha', solid: true, size: [1, 1], onWall: true, light: 64, lightColor: 0xffa040 },
+  torch: { name: 'Tocha', solid: true, size: [1, 1], item: 'torch', light: 64, lightColor: 0xffa040 },
+  furnace: { name: 'Fornalha', solid: true, size: [1, 1], item: 'furnace' },
+  bigrock: { name: 'Pedra grande', solid: true, size: [1, 1], tool: 'pickaxe', hp: 2 },
+  rockpile: { name: 'Pilha de pedras', solid: true, size: [1, 1], tool: 'pickaxe', hp: 1 },
+  minecart: { name: 'Carrinho de mina', solid: true, size: [2, 1] },
 };
 
 /** Tempo de crescimento das mudas de árvore (dias). */

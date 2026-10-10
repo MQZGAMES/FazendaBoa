@@ -84,7 +84,7 @@ export function generateFarm(seed: number): Location {
   // Saídas
   L.exits.push({ x: 37, y: H - 1, w: 5, h: 1, to: 'town', tx: 24 * 16 + 8, ty: 3 * 16 + 13, label: 'Vila' });
   L.exits.push({ x: 0, y: 29, w: 1, h: 5, to: 'forest', tx: 0, ty: 0, label: 'Floresta' });
-  L.exits.push({ x: 22, y: 0, w: 5, h: 1, to: 'mine', tx: 0, ty: 0, label: 'Mina' });
+  L.exits.push({ x: 22, y: 0, w: 5, h: 1, to: 'mine', tx: 10 * 16 + 8, ty: 13 * 16 + 13, label: 'Mina' });
 
   const free = (x: number, y: number) => L.inb(x, y) && !reserved[L.idx(x, y)] && L.terrainAt(x, y) === T.Grass && !L.occ[L.idx(x, y)];
   const nearWater = (x: number, y: number) => {
@@ -124,6 +124,8 @@ export function generateFarm(seed: number): Location {
       if (free(x + 1, y) && free(x, y + 1) && free(x + 1, y + 1)) L.place(x, y, { k: 'boulder', v: 0, hp: 8 });
     } else if (r < dens + 0.012 * far) {
       if (free(x + 1, y)) L.place(x, y, { k: 'bush', v: 0 });
+    } else if (r < dens + 0.02 * far) {
+      L.place(x, y, { k: 'bigrock', v: 0, hp: 2 });
     }
   }
   // Grama alta em manchas

@@ -11,6 +11,9 @@ import type { Particles } from '../systems/Particles';
 import type { Drops } from './Drops';
 import { canTill, till, water, plant, harvest, cropReady, isTilled, isWet, seedFits, fertilizer } from '../systems/Farming';
 import { SHOP_OPEN, SHOP_CLOSE, SHOP_CLOSED_WEEKDAY } from '../data/shops';
+import { MINE_ROCKS, PICK_POWER, LADDER_BASE, LADDER_STEP, MINE_FLOORS, ROCKPILE_STONE, SMELT } from '../data/mine';
+import { machineReady, smeltableOre, loadFurnace, minutesLeft } from '../systems/Machines';
+import { addItem } from '../systems/Inventory';
 import { selected, slotOf, takeFromSlot } from '../systems/Inventory';
 import { settings } from '../systems/Settings';
 import { bus } from '../systems/EventBus';
@@ -31,8 +34,8 @@ export interface WorldHost {
   sleepPrompt(): void;
 }
 
-type Kind = 'none' | 'harvest' | 'interact' | 'till' | 'water' | 'refill' | 'plant' | 'hit' | 'clear' | 'eat' | 'plantTree' | 'place' | 'fertilize';
-const PRIO: Record<Kind, number> = { none: 0, eat: 0.5, till: 1, water: 1, refill: 1, plant: 1.2, hit: 1, clear: 1, plantTree: 1, place: 1, fertilize: 1.3, interact: 2, harvest: 5 };
+type Kind = 'none' | 'harvest' | 'interact' | 'till' | 'water' | 'refill' | 'plant' | 'hit' | 'clear' | 'eat' | 'plantTree' | 'place' | 'fertilize' | 'collect' | 'load' | 'lift' | 'drop' | 'stack';
+const PRIO: Record<Kind, number> = { none: 0, eat: 0.5, till: 1, water: 1, refill: 1, plant: 1.2, hit: 1, clear: 1, plantTree: 1, place: 1, fertilize: 1.3, interact: 2, load: 2, lift: 2, drop: 2, stack: 2, collect: 3, harvest: 5 };
 
 interface Act { kind: Kind; tx: number; ty: number; icon: string; tool: ToolKind | null; slot: number; what: string; prio: number; }
 const mk = (): Act => ({ kind: 'none', tx: 0, ty: 0, icon: 'icon_hand', tool: null, slot: -1, what: '', prio: 0 });
@@ -92,6 +95,14 @@ export class Actions {
     const L = this.h.loc;
     if (!L.inb(x, y)) return;
     const i = L.idx(x, y);
+    if (G.flags.carry) {
+      if (!facing) return;
+      const h2 = L.objAt(x, y);
+      if (h2 && (h2.o.k === 'bigrock' || h2.o.k === 'rockpile')) { this.set(a, 'stack', x, y, 'rockpile_1', null); return; }
+      const tt = L.terrain[i];
+      if (!h2 && !L.crops.has(i) && (tt === T.Grass || tt === T.Dirt || tt === T.Cave || tt === T.Stone || tt === T.Floor)) this.set(a, 'drop', x, y, 'bigrock', null);
+      return;
+    }
     const crop = L.crops.get(i);
     if (crop && cropReady(crop)) { this.set(a, 'harvest', x, y, 'icon_hand', null); return; }
     const hit = L.objAt(x, y);
@@ -110,6 +121,35 @@ export class Actions {
         case 'tv': this.set(a, 'interact', x, y, 'icon_talk', null, -1, 'tv'); return;
         case 'sign': this.set(a, 'interact', x, y, 'icon_talk', null, -1, 'sign'); return;
         case 'chest': this.set(a, 'interact', x, y, 'icon_box', null, -1, 'chest:' + hit.i); return;
+        case 'ladder': this.set(a, 'interact', x, y, 'icon_door', null, -1, 'down'); return;
+        case 'ladderup': this.set(a, 'interact', x, y, 'icon_door', null, -1, 'up'); return;
+        case 'elevator': this.set(a, 'interact', x, y, 'icon_gear', null, -1, 'elevator'); return;
+        case 'minecart': this.set(a, 'interact', x, y, 'icon_talk', null, -1, 'minecart'); return;
+        case 'furnace': {
+          if (machineReady(o)) { this.set(a, 'collect', x, y, itemIcon(o.m!.out), null, -1, String(hit.i)); return; }
+          if (!o.m) {
+            const ore = smeltableOre(selected()?.id);
+            if (ore) { this.set(a, 'load', x, y, 'icon_gear', null, -1, String(hit.i) + ':' + ore); return; }
+          }
+          if (!facing) return;
+          const sl = selected();
+          if (!o.m && sl && ITEMS[sl.id]?.cat === 'tool') { this.set(a, 'hit', x, y, this.toolIcon(ITEMS[sl.id].tool!), ITEMS[sl.id].tool!, G.player.sel); return; }
+          this.set(a, 'interact', x, y, 'icon_gear', null, -1, 'furnace:' + hit.i); return;
+        }
+        case 'bigrock': {
+          if (!facing) return;
+          const sl = selected();
+          if (sl && ITEMS[sl.id]?.tool === 'pickaxe') { this.set(a, 'hit', x, y, this.toolIcon('pickaxe'), 'pickaxe', G.player.sel); return; }
+          this.set(a, 'lift', x, y, 'icon_lift', null, -1, String(hit.i)); return;
+        }
+        case 'torch': {
+          if (!facing) return;
+          const sl = selected();
+          const tool = sl && ITEMS[sl.id]?.tool ? ITEMS[sl.id].tool! : 'axe';
+          const slot = sl && ITEMS[sl.id]?.tool ? G.player.sel : this.toolSlot('axe');
+          if (slot >= 0) this.set(a, 'hit', x, y, this.toolIcon(tool), tool, slot);
+          return;
+        }
       }
       if (!facing) return;
       const def = OBJ[o.k];
@@ -178,6 +218,11 @@ export class Actions {
       case 'plant': return this.doPlant(a.tx, a.ty, a.slot);
       case 'plantTree': return this.doPlantTree(a.tx, a.ty, a.slot);
       case 'eat': return this.doEat(a.slot);
+      case 'collect': return this.doCollect(Number(a.what));
+      case 'load': { const [anc, ore] = a.what.split(':'); return this.doLoad(Number(anc), ore); }
+      case 'lift': return this.doLift(Number(a.what));
+      case 'drop': return this.doDrop(a.tx, a.ty);
+      case 'stack': return this.doStack(a.tx, a.ty);
       case 'place': return this.doPlace(a.tx, a.ty, a.slot);
       case 'fertilize': return this.doFertilize(a.tx, a.ty, a.slot);
       default: return this.doTool(a);
@@ -272,6 +317,47 @@ export class Actions {
         if (t !== 'pickaxe') return this.wrongTool('Picareta');
         remove(); P.burst('chip_stone', cx, cy, 9, { up: 55 }); D.spawn('stone', 1 + (Math.random() < 0.3 ? 1 : 0), 0, cx, cy); addXp('mining', 1);
         return;
+      case 'ore': case 'crystal': {
+        if (t !== 'pickaxe') return this.wrongTool('Picareta');
+        const def = o.k === 'ore' ? MINE_ROCKS[o.t ?? 0] : null;
+        o.hp = (o.hp ?? 1) - PICK_POWER[tier];
+        P.burst('chip_stone', cx, cy - 2, 5, { up: 50 });
+        if (o.hp > 0.001) { this.wobble(anchor); return; }
+        remove();
+        P.burst('chip_stone', cx, cy - 2, 10, { up: 60, speed: 34 });
+        if (def) {
+          const q = def.qty[0] + Math.floor(Math.random() * (def.qty[1] - def.qty[0] + 1));
+          D.spawn(def.drop, q, 0, cx, cy);
+          if (def.drop !== 'stone' && def.drop !== 'coal' && !def.drop.endsWith('_ore')) { P.burst('spark', cx, cy - 6, 5, { up: 50, grav: 40, life: 0.8 }); haptic.rare(); }
+          addXp('mining', def.drop === 'stone' ? 1 : def.drop.endsWith('_ore') ? 4 : 6);
+        } else {
+          D.spawn(Math.random() < 0.15 ? ['quartz', 'amethyst', 'emerald'][o.v % 3] : 'quartz', 1, 0, cx, cy);
+          P.burst('spark', cx, cy - 6, 6, { up: 50, grav: 40, life: 0.8 });
+        }
+        this.mineLadderChance(ax, ay);
+        return;
+      }
+      case 'bigrock':
+        if (t !== 'pickaxe') return this.wrongTool('Picareta');
+        o.hp = (o.hp ?? 2) - PICK_POWER[tier];
+        P.burst('chip_stone', cx, cy, 6, { up: 55 });
+        if (o.hp > 0.001) { this.wobble(anchor); return; }
+        remove(); D.spawn('stone', 3, 0, cx, cy); addXp('mining', 2); this.mineLadderChance(ax, ay);
+        return;
+      case 'rockpile': {
+        if (t !== 'pickaxe') return this.wrongTool('Picareta');
+        const n = (o.g ?? 1) * ROCKPILE_STONE;
+        remove(); this.h.shake(80, 2);
+        P.burst('chip_stone', cx, cy - 4, 14, { up: 70, speed: 40 });
+        D.spawn('stone', n, 0, cx, cy, 20);
+        addXp('mining', o.g ?? 1);
+        return;
+      }
+      case 'torch': case 'furnace': {
+        if (o.m) { bus.emit('toast', 'A fornalha está em uso.', 'warn'); return; }
+        remove(); D.spawn(OBJ[o.k].item ?? o.k, 1, 0, cx, cy);
+        return;
+      }
       case 'sapling':
         remove(); P.burst('chip_leaf', cx, cy, 6, { up: 40 }); D.spawn(TREE_SEED_OF[o.t ?? 0], 1, 0, cx, cy);
         return;
@@ -387,6 +473,84 @@ export class Actions {
     }
   }
 
+  /** Escada aparece ao quebrar pedras aleatórias (chance cresce a cada pedra). */
+  private mineLadderChance(x: number, y: number): void {
+    const L = this.h.loc;
+    if (!L.id.startsWith('mine:') || L.extra.ladder) return;
+    const broken = ((L.extra.broken as number) ?? 0) + 1;
+    L.extra.broken = broken;
+    let rocks = 0;
+    for (const o of L.objs.values()) if (o.k === 'ore' || o.k === 'bigrock') rocks++;
+    if (Math.random() < LADDER_BASE + broken * LADDER_STEP || rocks <= 3) {
+      if (L.place(x, y, { k: 'ladder', v: 0 })) {
+        L.extra.ladder = 1;
+        this.h.view.refreshObj(L.idx(x, y));
+        const [cx, cy] = this.center(x, y);
+        this.h.parts.burst('spark', cx, cy, 8, { up: 40, grav: 30, life: 0.9 });
+        bus.emit('toast', 'Uma escada apareceu!', 'good');
+        haptic.rare();
+      }
+    }
+  }
+
+  private doCollect(anchor: number): void {
+    const L = this.h.loc;
+    const o = L.objs.get(anchor);
+    if (!o?.m) return;
+    if (addItem(o.m.out, o.m.q) > 0) { bus.emit('toast', 'Mochila cheia!', 'warn'); return; }
+    bus.emit('pickup', o.m.out, o.m.q);
+    addXp('mining', 3);
+    delete o.m;
+    const spr = this.h.view.spriteOf(anchor);
+    if (spr) this.h.sc.tweens.add({ targets: spr, scaleY: 0.85, scaleX: 1.12, duration: 70, yoyo: true });
+    this.h.view.refreshObj(anchor);
+    haptic.harvest();
+  }
+
+  private doLoad(anchor: number, ore: string): void {
+    const L = this.h.loc;
+    const o = L.objs.get(anchor);
+    if (!o || !loadFurnace(o, ore)) return;
+    this.h.view.refreshObj(anchor);
+    bus.emit('toast', `Fundindo ${ITEMS[ore]?.name ?? ore}… pronto em ${SMELT.minutes} min.`, 'info');
+    const spr = this.h.view.spriteOf(anchor);
+    if (spr) this.h.parts.burst('chip_dirt', spr.x, spr.y - 20, 6, { up: 30, tint: 0xff9040, grav: 20 });
+  }
+
+  private doLift(anchor: number): void {
+    const L = this.h.loc;
+    if (!L.objs.get(anchor)) return;
+    L.remove(anchor); this.h.view.refreshObj(anchor);
+    G.flags.carry = 1;
+    this.h.player.carrying = true;
+    haptic.tap();
+  }
+
+  private doDrop(x: number, y: number): void {
+    const L = this.h.loc;
+    if (!L.place(x, y, { k: 'bigrock', v: 0, hp: 2 })) return;
+    this.h.view.refreshObj(L.idx(x, y));
+    delete G.flags.carry;
+    this.h.player.carrying = false;
+    const [cx, cy] = this.center(x, y);
+    this.h.parts.burst('chip_dirt', cx, cy + 4, 6, { up: 30 });
+  }
+
+  private doStack(x: number, y: number): void {
+    const L = this.h.loc;
+    const hit = L.objAt(x, y);
+    if (!hit) return;
+    if (hit.o.k === 'bigrock') { L.objs.set(hit.i, { k: 'rockpile', v: 0, g: 2 }); L.rev++; }
+    else if (hit.o.k === 'rockpile') { hit.o.g = (hit.o.g ?? 1) + 1; L.rev++; }
+    else return;
+    this.h.view.refreshObj(hit.i);
+    delete G.flags.carry;
+    this.h.player.carrying = false;
+    const [cx, cy] = this.center(x, y);
+    this.h.parts.burst('chip_stone', cx, cy, 6, { up: 35 });
+    bus.emit('toast', `Pilha de pedras: ${hit.o.k === 'rockpile' ? hit.o.g : 2} pedras grandes.`, 'info');
+  }
+
   private doPlace(x: number, y: number, slot: number): void {
     const st = G.player.inv[slot];
     const kind = st ? ITEMS[st.id]?.place : undefined;
@@ -432,6 +596,12 @@ export class Actions {
   private doInteract(what: string, x: number, y: number): void {
     void x; void y;
     if (what.startsWith('chest:')) { bus.emit('menu', what); return; }
+    if (what.startsWith('furnace:')) {
+      const o = this.h.loc.objs.get(Number(what.slice(8)));
+      if (o?.m) bus.emit('toast', `Fundindo… pronto em ${minutesLeft(o)} min.`, 'info');
+      else bus.emit('dialog', { title: 'Fornalha', icon: 'furnace', text: 'Fornalha: 5 minérios + 1 carvão = 1 barra em 30 minutos.\nTenha os minérios e o carvão na mochila e toque na fornalha.' });
+      return;
+    }
     switch (what) {
       case 'door':
         if (this.h.loc.id === 'farm') this.h.goTo('house', 6 * 16, 8 * 16 + 12, 1);
@@ -445,6 +615,21 @@ export class Actions {
         return;
       }
       case 'bin': bus.emit('menu', 'ship'); return;
+      case 'down': {
+        const n = (this.h.loc.extra.floor as number) ?? 0;
+        if (n >= MINE_FLOORS) { bus.emit('toast', 'Este é o fundo da mina.', 'info'); return; }
+        G.flags.mineDeepest = Math.max(G.flags.mineDeepest ?? 0, n + 1);
+        this.h.goTo(`mine:${n + 1}`, -1, -1, 0);
+        return;
+      }
+      case 'up': {
+        const n = (this.h.loc.extra.floor as number) ?? 1;
+        if (n <= 1) this.h.goTo('mine', 9 * 16 + 8, 7 * 16 + 13, 0);
+        else this.h.goTo(`mine:${n - 1}`, -1, -1, 0);
+        return;
+      }
+      case 'elevator': bus.emit('menu', 'elevator'); return;
+      case 'minecart': bus.emit('dialog', { title: 'Carrinho de mina', icon: 'minecart', text: 'Os trilhos estão quebrados. Talvez o Casarão da Vila ajude a consertá-los.' }); return;
       case 'shop': {
         const m = G.time.min, wd = (G.time.day - 1) % 7;
         if (wd === SHOP_CLOSED_WEEKDAY) bus.emit('dialog', { title: 'Loja', icon: 'icon_door', text: 'Fechado às quartas-feiras.\nVolte amanhã!' });

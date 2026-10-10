@@ -5,6 +5,11 @@ import { TERRAIN } from '../art';
 import { MASK_TO_AUTO, AN, ANE, AE, ASE, AS, ASW, AW, ANW, GRASS_VARIANTS, GRASS_WEIGHTS } from '../art/terrain';
 import { ROCK_KINDS } from '../art/nature';
 import { CROP_STAGES } from '../data/crops';
+import { itemIcon } from '../data/items';
+import { machineReady, machineWorking } from '../systems/Machines';
+import type { Lighting } from '../systems/Lighting';
+
+const CRYSTAL_LIGHT = [0x6ab8f0, 0xb070e0, 0x50d090];
 import { hash2 } from '../art/rng';
 import { TILE } from '../config';
 
@@ -18,6 +23,9 @@ interface ObjSprite {
   tree: boolean;
   baseY: number;
   key: string;
+  /** balão de "pronto" (máquinas) */
+  bub: Phaser.GameObjects.Image | null;
+  bubIc: Phaser.GameObjects.Image | null;
 }
 
 interface CropSprite { spr: Phaser.GameObjects.Image; gen: number; ready: boolean; }
@@ -44,6 +52,11 @@ export function objFrame(o: WObj, season: number): string {
     case 'house': return o.v === 1 ? 'house_b' : o.v === 2 ? 'house_g' : 'house';
     case 'manor': return `manor_${Math.min(6, o.g ?? 0)}`;
     case 'flowerbed': return `flowerbed_${o.v % 3}`;
+    case 'ladder': return 'ladder_down';
+    case 'ladderup': return 'ladder_up';
+    case 'crystal': return `crystal_${o.v % 3}`;
+    case 'rockpile': return `rockpile_${(o.g ?? 1) >= 8 ? 2 : (o.g ?? 1) >= 4 ? 1 : 0}`;
+    case 'furnace': return o.m ? 'furnace_on' : 'furnace';
     case 'bin': return 'bin';
     case 'fence': return `fence_${o.v}`;
     case 'mailbox': return 'mailbox';
@@ -53,7 +66,7 @@ export function objFrame(o: WObj, season: number): string {
 }
 
 /** Ajuste vertical (px) do sprite em relação à base do tile. */
-const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1, bed: 1, tv: 1, table: 2, chair: 1, plant: 1, lamp: 1, shelf: 1, fireplace: 0, window: -2, shop: 0, smith: 0, manor: 0, fountain: 2, bench: 1, lamppost: 1, chest: 1, sign: 1 };
+const DY: Partial<Record<string, number>> = { tree: 2, stump: 1, boulder: 1, house: 0, sapling: 1, bed: 1, tv: 1, table: 2, chair: 1, plant: 1, lamp: 1, shelf: 1, fireplace: 0, window: -2, shop: 0, smith: 0, manor: 0, fountain: 2, bench: 1, lamppost: 1, chest: 1, sign: 1, ladderup: 2, elevator: 1, crystal: 1, torch: 1, furnace: 1, walltorch: -4 };
 
 /**
  * Renderização de um mapa: tilemap com autotiling, água animada e objetos
@@ -81,6 +94,8 @@ export class LocationView {
   private sparks: Phaser.GameObjects.Image[] = [];
   private sparkT = 0;
   private swayList: ObjSprite[] = [];
+  private lightList: ObjSprite[] = [];
+  private machineList: ObjSprite[] = [];
   private treeList: ObjSprite[] = [];
   time = 0;
 
@@ -126,9 +141,11 @@ export class LocationView {
       case T.Grass: return TERRAIN.grass[s][grassVariant(x, y)];
       case T.Dirt: return TERRAIN.dirt[s] + MASK_TO_AUTO[this.mask(x, y, T.Dirt)];
       case T.Stone: return TERRAIN.stone[s] + MASK_TO_AUTO[this.mask(x, y, T.Stone)];
+      case T.Cave: return TERRAIN.cave[Math.floor(hash2(x, y, 7) * 6)];
+      case T.Rock: return TERRAIN.rock + MASK_TO_AUTO[this.mask(x, y, T.Rock)];
       case T.Water: {
         const m = this.mask(x, y, T.Water);
-        return m === 255 ? -1 : TERRAIN.water[s] + MASK_TO_AUTO[m];
+        return m === 255 ? -1 : (this.loc.id.startsWith('mine') ? TERRAIN.waterCave : TERRAIN.water[s]) + MASK_TO_AUTO[m];
       }
       case T.Floor: return TERRAIN.floor[hash2(x, y, 3) < 0.5 ? 0 : 1];
       case T.Wall: {
@@ -291,14 +308,54 @@ export class LocationView {
   private release(os: ObjSprite): void {
     os.spr.setVisible(false);
     this.pool.push(os.spr);
+    os.bub?.destroy(); os.bubIc?.destroy(); os.bub = null; os.bubIc = null;
     if (os.sh) { os.sh.setVisible(false); this.shPool.push(os.sh); os.sh = null; }
   }
 
   private rebuildLists(): void {
-    this.swayList.length = 0; this.treeList.length = 0;
+    this.swayList.length = 0; this.treeList.length = 0; this.lightList.length = 0; this.machineList.length = 0;
     for (const os of this.active.values()) {
       if (os.sway) this.swayList.push(os);
       if (os.tree) this.treeList.push(os);
+      const o = this.loc.objs.get(os.anchor);
+      if (!o) continue;
+      if (OBJ[o.k].light || o.k === 'furnace') this.lightList.push(os);
+      if (o.k === 'furnace') this.machineList.push(os);
+    }
+  }
+
+  /** Fontes de luz visíveis (tochas, cristais, máquinas acesas). */
+  collectLights(l: Lighting): void {
+    for (let i = 0; i < this.lightList.length; i++) {
+      const os = this.lightList[i];
+      const o = this.loc.objs.get(os.anchor);
+      if (!o) continue;
+      const def = OBJ[o.k];
+      if (o.k === 'furnace') { if (o.m && machineWorking(o)) l.add(os.spr.x, os.baseY - 8, 40, 0xff7030, 1); continue; }
+      const col = o.k === 'crystal' ? CRYSTAL_LIGHT[o.v % 3] : def.lightColor ?? 0xffffff;
+      l.add(os.spr.x, os.baseY - (o.k === 'walltorch' ? 10 : 8), def.light ?? 40, col, o.k.includes('torch') ? 1 : 0);
+    }
+  }
+
+  /** Máquinas: quadro "trabalhando" e balão com o produto quando pronto. */
+  private updateMachines(): void {
+    for (let i = 0; i < this.machineList.length; i++) {
+      const os = this.machineList[i];
+      const o = this.loc.objs.get(os.anchor);
+      if (!o) continue;
+      const ready = machineReady(o);
+      const working = !!o.m && !ready;
+      const want = o.k === 'furnace' ? (working ? 'furnace_on' : 'furnace') : os.key;
+      if (os.spr.frame.name !== want) os.spr.setFrame(want);
+      if (ready && o.m) {
+        if (!os.bub) {
+          os.bub = this.scene.add.image(0, 0, 'atlas', 'bubble');
+          os.bubIc = this.scene.add.image(0, 0, 'atlas', itemIcon(o.m.out)).setScale(0.75);
+        }
+        const by = os.baseY - os.spr.displayHeight - 8 + Math.sin(this.time * 3) * 1.5;
+        os.bub.setPosition(os.spr.x, by).setDepth(os.baseY + 200);
+        os.bubIc!.setPosition(os.spr.x, by - 1).setDepth(os.baseY + 201);
+      } else if (os.bub) { os.bub.destroy(); os.bubIc?.destroy(); os.bub = null; os.bubIc = null; }
     }
   }
 
@@ -333,7 +390,7 @@ export class LocationView {
       if (!o) continue;
       let os = this.active.get(i);
       if (!os) {
-        os = { spr: this.acquire(), sh: null, anchor: i, gen: g, sway: false, phase: hash2(x, y, 5) * 6.28, tree: false, baseY: 0, key: '' };
+        os = { spr: this.acquire(), sh: null, anchor: i, gen: g, sway: false, phase: hash2(x, y, 5) * 6.28, tree: false, baseY: 0, key: '', bub: null, bubIc: null };
         this.active.set(i, os);
         this.applyObj(os, o);
       }
@@ -366,6 +423,7 @@ export class LocationView {
       this.water.setTilePosition(x + Math.sin(this.time * 0.6) * 3, y - this.time * 3);
       this.waterHi.setTilePosition(x - this.time * 5, y + Math.sin(this.time * 0.9) * 4);
     }
+    this.updateMachines();
     // brilho pulsante nas plantações prontas
     this.sparkT -= dt;
     if (this.sparkT <= 0 && this.readyList.length) {
