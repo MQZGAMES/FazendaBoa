@@ -28,6 +28,8 @@ export class Modal {
   private dragY0 = -1;
   private dragging = false;
   onClose: (() => void) | null = null;
+  /** quando true, arrastar não fecha o painel (ex.: arrastando um item) */
+  protected lockSwipe = false;
 
   constructor(protected scene: Phaser.Scene, depth = 30) {
     this.c = scene.add.container(0, 0).setDepth(depth).setVisible(false);
@@ -110,12 +112,14 @@ export class Modal {
   }
 
   move(x: number, y: number): void {
+    if (this.lockSwipe) { this.onMove(x, y); return; }
     if (this.dragY0 >= 0 && y - this.dragY0 > 12 && !this.downBtn) this.dragging = true;
     if (this.dragging) { this.c.y = Math.max(0, y - this.dragY0); this.dim.y = -this.c.y; }
     this.onMove(x, y);
   }
 
   up(x: number, y: number): void {
+    if (this.lockSwipe) { this.lockSwipe = false; this.downBtn = null; this.onDragEnd(x, y); return; }
     const b = this.downBtn;
     this.downBtn = null;
     if (b) {
@@ -139,4 +143,5 @@ export class Modal {
   protected onDown(_x: number, _y: number): void { /* */ }
   protected onMove(_x: number, _y: number): void { /* */ }
   protected onTap(_x: number, _y: number): void { /* */ }
+  protected onDragEnd(_x: number, _y: number): void { /* */ }
 }

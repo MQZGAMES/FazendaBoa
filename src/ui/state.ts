@@ -8,6 +8,8 @@ export const uiState = {
   panelOpen: false,
   debug: false,
   showCollision: false,
+  /** segundos até dormir à força por exaustão (-1 = não exausto) */
+  exhaust: -1,
   /** contagem de objetos/sprites para debug */
   objCount: 0,
 };

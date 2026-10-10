@@ -3,6 +3,7 @@ import { display, measureDisplay } from './systems/Display';
 import { bus } from './systems/EventBus';
 import { perf } from './systems/Performance';
 import { saveGame } from './systems/Save';
+import { G } from './state';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { WorldScene } from './scenes/WorldScene';
@@ -67,17 +68,38 @@ document.addEventListener('dblclick', (e) => e.preventDefault());
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
-declare global { interface Window { __game?: Phaser.Game; __snap?: (name: string, steps?: number) => Promise<string>; } }
+declare global { interface Window { __game?: Phaser.Game; __snap?: (name: string, steps?: number, crop?: [number, number, number, number]) => Promise<string>; __sheet?: (name: string, frames: string[], tex?: string, scale?: number) => Promise<string>; __G?: () => typeof G; } }
 if (import.meta.env.DEV) {
   window.__game = game;
+  window.__G = () => G;
   /** Avança N quadros manualmente e envia uma captura para .snaps/<name>.png (pane oculto não renderiza). */
-  window.__snap = (name: string, steps = 2) => new Promise((resolve) => {
+  window.__snap = (name: string, steps = 2, crop?: [number, number, number, number]) => new Promise((resolve) => {
     let t = performance.now();
     for (let i = 0; i < steps; i++) { t += 16.7; game.step(t, 16.7); }
     game.renderer.snapshot((img) => {
-      const src = (img as HTMLImageElement).src;
+      let src = (img as HTMLImageElement).src;
+      if (crop) {
+        const c = document.createElement('canvas'); c.width = crop[2]; c.height = crop[3];
+        c.getContext('2d')!.drawImage(img as HTMLImageElement, crop[0], crop[1], crop[2], crop[3], 0, 0, crop[2], crop[3]);
+        src = c.toDataURL();
+      }
       void fetch('/__snap?name=' + name, { method: 'POST', body: src }).then(() => resolve('ok'));
     });
     game.step(t + 16.7, 16.7);
   });
+  /** Desenha frames do atlas ampliados lado a lado e salva em .snaps/<name>.png. */
+  window.__sheet = (name: string, frames: string[], tex = 'player', scale = 6) => {
+    const t = game.textures.get(tex);
+    const src = t.getSourceImage() as HTMLImageElement;
+    const fs = frames.map((f) => t.get(f));
+    const cols = Math.min(10, fs.length);
+    const fw = Math.max(...fs.map((f) => f.cutWidth)), fh = Math.max(...fs.map((f) => f.cutHeight));
+    const c = document.createElement('canvas');
+    c.width = cols * (fw + 2) * scale; c.height = Math.ceil(fs.length / cols) * (fh + 2) * scale;
+    const ctx = c.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#5aa846'; ctx.fillRect(0, 0, c.width, c.height);
+    fs.forEach((f, i) => ctx.drawImage(src, f.cutX, f.cutY, f.cutWidth, f.cutHeight, (i % cols) * (fw + 2) * scale, Math.floor(i / cols) * (fh + 2) * scale, f.cutWidth * scale, f.cutHeight * scale));
+    return fetch('/__snap?name=' + name, { method: 'POST', body: c.toDataURL() }).then(() => 'ok');
+  };
 }

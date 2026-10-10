@@ -46,7 +46,7 @@ export function itemValue(id: string, ql = 0): number {
 }
 
 /** Encerra o dia: vendas, crescimento, clima, mudas, entulho, energia. */
-export function endDay(passOut: boolean): DaySummary {
+export function endDay(passOut: boolean, penalize = true): DaySummary {
   const late = G.time.min >= 24 * 60;
   // vendas da caixa de envio
   const bin = shippingBin();
@@ -64,7 +64,8 @@ export function endDay(passOut: boolean): DaySummary {
 
   // multa por desmaio: 10% (máx. 1000g)
   let penalty = 0;
-  if (passOut) {
+  delete G.flags.exhaust;
+  if (passOut && penalize) {
     penalty = Math.min(1000, Math.floor(G.player.money * 0.1));
     G.player.money -= penalty;
   }

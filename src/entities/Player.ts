@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { playerFrame, PLAYER_ANIMS, SWING_HANDS, WATER_HANDS, HARVEST_HANDS, type Dir, type PlayerAnim } from '../art/character';
+import { playerFrame, PLAYER_ANIMS, SWING_HANDS, WATER_HANDS, HARVEST_HANDS, type Dir, type FrameDir, type PlayerAnim } from '../art/character';
 import { input } from '../systems/Input';
 import type { Location } from '../world/Location';
 import type { Dir4 } from '../state';
@@ -14,7 +14,7 @@ export const WALK_SPEED = 46;
 /** Tabelas de nomes de frames pré-calculadas (zero alocação por quadro). */
 const FRAMES = {} as Record<PlayerAnim, string[][]>;
 for (const a of Object.keys(PLAYER_ANIMS) as PlayerAnim[]) {
-  FRAMES[a] = [0, 1, 2].map((d) => Array.from({ length: PLAYER_ANIMS[a] }, (_, i) => playerFrame((['d', 'u', 's'] as Dir[])[d], a, i)));
+  FRAMES[a] = [0, 1, 2, 3].map((d) => Array.from({ length: PLAYER_ANIMS[a] }, (_, i) => playerFrame((['d', 'u', 'l', 's'] as FrameDir[])[d], a, i)));
 }
 
 export type ActKind = 'swing' | 'water' | 'harvest';
@@ -89,8 +89,19 @@ export class Player {
     this.applyFrame();
   }
 
+  /** Centro do tile atual (onde o jogador se alinha ao parar). */
+  private snapTo(loc: Location, dt: number, speed: number): void {
+    const cx = this.tx * TILE + 8, cy = this.ty * TILE + 13;
+    const dx = cx - this.x, dy = cy - this.y;
+    if (Math.abs(dx) < 0.05 && Math.abs(dy) < 0.05) return;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const k = Math.min(1, (speed * dt) / d);
+    const nx = this.x + dx * k, ny = this.y + dy * k;
+    if (!this.blocked(loc, nx, ny)) { this.x = nx; this.y = ny; }
+  }
+
   update(dt: number, loc: Location): void {
-    if (this.act) { this.updateAct(dt); this.updateSweat(dt); return; }
+    if (this.act) { this.snapTo(loc, dt, 90); this.updateAct(dt); this.updateSweat(dt); return; }
     let mx = input.locked || this.frozen ? 0 : input.mx;
     let my = input.locked || this.frozen ? 0 : input.my;
     const mag = Math.sqrt(mx * mx + my * my);
@@ -113,6 +124,8 @@ export class Player {
       for (let s = 0; s < steps; s++) this.step(loc, sx, sy, nmx, nmy);
     } else {
       this.speed = 0;
+      // parado: desliza suavemente até o centro do tile
+      this.snapTo(loc, dt, 55);
     }
     this.animate(dt);
     this.updateSweat(dt);
@@ -191,12 +204,10 @@ export class Player {
   face(d: Dir4): void { this.dir = d; this.applyFrame(); }
 
   applyFrame(): void {
-    const d = this.dir === 0 ? 0 : this.dir === 1 ? 1 : 2;
     const anim = this.anim;
-    const fr = FRAMES[anim][d];
+    const fr = FRAMES[anim][this.dir];
     this.sprite.setFrame(fr[Math.min(this.frame, fr.length - 1)]);
     const flip = this.dir === 2;
-    this.sprite.flipX = flip;
     this.sprite.setPosition(this.x, this.y + 1);
     this.sprite.setDepth(this.y);
     this.shadow.setPosition(this.x, this.y);

@@ -296,8 +296,9 @@ export class LocationView {
   /** Culling por retângulo de tiles visível (+ margem). */
   updateCulling(view: Phaser.Geom.Rectangle): void {
     const L = this.loc;
-    const x0 = Math.max(0, Math.floor(view.x / TILE) - 3), x1 = Math.min(L.w - 1, Math.ceil(view.right / TILE) + 3);
-    const y0 = Math.max(0, Math.floor(view.y / TILE) - 2), y1 = Math.min(L.h - 1, Math.ceil(view.bottom / TILE) + 6);
+    // margens cobrem objetos grandes: âncora à esquerda/acima (base até 6x3) e sprites altos (até 6 tiles)
+    const x0 = Math.max(0, Math.floor(view.x / TILE) - 7), x1 = Math.min(L.w - 1, Math.ceil(view.right / TILE) + 3);
+    const y0 = Math.max(0, Math.floor(view.y / TILE) - 4), y1 = Math.min(L.h - 1, Math.ceil(view.bottom / TILE) + 7);
     const r = this.lastRect;
     if (r.x0 === x0 && r.y0 === y0 && r.x1 === x1 && r.y1 === y1 && r.rev === L.rev) return;
     r.x0 = x0; r.y0 = y0; r.x1 = x1; r.y1 = y1; r.rev = L.rev;

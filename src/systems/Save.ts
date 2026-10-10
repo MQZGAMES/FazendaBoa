@@ -1,12 +1,13 @@
 import { G, setGame, newGameState, type GameState } from '../state';
 import { Location, type Crop } from '../world/Location';
 import { staticTemplate } from '../world/locations';
+import { applyIslandBorder } from '../world/genFarm';
 import { idbGet, idbSet } from './idb';
 import type { WObj } from '../data/objects';
 import { GAME_VERSION } from '../config';
 
 /** Versão do esquema do save; adicione migrações em MIGRATIONS. */
-export const SAVE_SCHEMA = 1;
+export const SAVE_SCHEMA = 2;
 const KEY = 'save:main';
 const BACKUP = 'save:backup';
 
@@ -49,7 +50,10 @@ export function serialize(st: GameState = G): SaveFile {
 }
 
 /** Migrações de esquema: MIGRATIONS[n] converte do esquema n para n+1. */
-const MIGRATIONS: Record<number, (s: SaveFile) => SaveFile> = {};
+const MIGRATIONS: Record<number, (s: SaveFile) => SaveFile> = {
+  // 1 → 2: a fazenda virou ilha (mar nas bordas sem saída)
+  1: (s) => ({ ...s, schema: 2, flags: { ...s.flags, needIsland: 1 } }),
+};
 
 export function validate(raw: unknown): SaveFile | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -86,6 +90,7 @@ export function deserialize(s: SaveFile): GameState {
     for (const [i, c] of ls.crops ?? []) L.crops.set(i, c);
     L.rebuildOcc();
     L.extra = ls.extra ?? {};
+    if (ls.id === 'farm' && st.flags.needIsland) { applyIslandBorder(L); delete st.flags.needIsland; }
     st.locs.set(ls.id, L);
   }
   return st;

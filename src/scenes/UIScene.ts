@@ -17,6 +17,7 @@ import { DebugPanel } from '../ui/DebugPanel';
 import { Dialog, Summary, Pickups } from '../ui/Dialogs';
 import { GameMenu, SettingsPanel } from '../ui/Menus';
 import { topModal, anyModal } from '../ui/Modal';
+import { InventoryPanel } from '../ui/InventoryPanel';
 
 interface SecBtn { id: string; icon: string; bg: Phaser.GameObjects.Image; ic: Phaser.GameObjects.Image; x: number; y: number; r: number; visible: boolean; }
 
@@ -33,6 +34,7 @@ export class UIScene extends Phaser.Scene {
   private summary!: Summary;
   private menu!: GameMenu;
   private settingsPanel!: SettingsPanel;
+  private inventory!: InventoryPanel;
   private pickups!: Pickups;
   private actBg!: Phaser.GameObjects.Image;
   private actIcon!: Phaser.GameObjects.Image;
@@ -48,6 +50,9 @@ export class UIScene extends Phaser.Scene {
   private clockTaps: number[] = [];
   private joyZoneTop = 0;
   private fpsText!: Phaser.GameObjects.BitmapText;
+  private exhaustC!: Phaser.GameObjects.Container;
+  private exhaustT!: Phaser.GameObjects.BitmapText;
+  private exhaustLast = -2;
   private hudItems: Phaser.GameObjects.GameObject[] = [];
 
   constructor() { super('UI'); }
@@ -64,6 +69,7 @@ export class UIScene extends Phaser.Scene {
     this.pickups = new Pickups(this);
     this.dialog = new Dialog(this);
     this.summary = new Summary(this);
+    this.inventory = new InventoryPanel(this);
     this.settingsPanel = new SettingsPanel(this, () => { this.joy.applySize(); this.layout(); });
     this.menu = new GameMenu(this, () => this.settingsPanel.present(), () => this.toTitle(), () => this.reloadWorld());
     this.actBg = this.add.image(0, 0, 'atlas', 'ui_btn_round').setScale(UI).setDepth(10);
@@ -75,6 +81,10 @@ export class UIScene extends Phaser.Scene {
       this.sec.push({ id, icon: ic, bg, ic: im, x: 0, y: 0, r: 22, visible: true });
     }
     this.fpsText = txt(this, 0, 0, '', 'light', 1.5).setDepth(60).setVisible(false);
+    // aviso de exaustão com cronômetro
+    const exBg = this.add.image(0, 0, uiTex(this, 'wood', 64, 16)).setOrigin(0, 0).setScale(UI);
+    this.exhaustT = txt(this, 64, 8, '', 'light').setOrigin(0.5, 0);
+    this.exhaustC = this.add.container(0, 0, [exBg, this.exhaustT]).setDepth(15).setVisible(false);
     this.hudItems = [this.money.c, this.clock.c, this.energy.c, this.hotbar.c, this.actBg, this.actIcon, ...this.sec.flatMap((s) => [s.bg, s.ic])];
 
     this.input.on('pointerdown', this.onDown, this);
@@ -139,9 +149,10 @@ export class UIScene extends Phaser.Scene {
     this.energy.c.setPosition(ex, Math.max(top + this.clock.h + 12, ey));
     this.toast.layout(W / 2, top + this.clock.h + 10, Math.min(W - 32, 340));
     this.joyZoneTop = H * 0.65 - 40;
-    this.fpsText.setPosition(s.left + pad, top + this.money.h + 6);
+    this.fpsText.setPosition(s.left + pad, top + this.money.h + 48);
     this.debug.layout(s.left + pad, top + this.money.h + 26, W);
     this.pickups.layout(s.left + pad, this.hotbar.top - 8);
+    this.exhaustC.setPosition(s.left + pad, top + this.money.h + 8);
   }
 
   private css(p: Phaser.Input.Pointer): { x: number; y: number } {
@@ -246,7 +257,7 @@ export class UIScene extends Phaser.Scene {
   openMenu(id: string): void {
     this.releaseAll();
     switch (id) {
-      case 'inv': bus.emit('toast', 'O inventário completo chega na Fase 3!', 'info'); break;
+      case 'inv': this.inventory.present(); break;
       case 'craft': bus.emit('toast', 'Crafting chega na Fase 5!', 'info'); break;
       case 'map': bus.emit('toast', `Fazenda ${G.player.farm} — o mapa chega com a vila.`, 'info'); break;
       case 'menu': this.menu.present(); break;
@@ -287,6 +298,17 @@ export class UIScene extends Phaser.Scene {
       this.openMenu('inv');
     }
     perf.setIdle(!anyModal() && !input.actionHeld && !this.joy.active && performance.now() - input.lastActive > 10000);
+    const ex = uiState.exhaust;
+    if (ex < 0) { if (this.exhaustC.visible) this.exhaustC.setVisible(false); this.exhaustLast = -2; }
+    else {
+      const sec = Math.ceil(ex);
+      if (sec !== this.exhaustLast) {
+        this.exhaustLast = sec;
+        this.exhaustT.setText(`Exausto ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`);
+        this.exhaustC.setVisible(true);
+      }
+      this.exhaustC.alpha = sec <= 30 ? 0.6 + 0.4 * Math.abs(Math.sin(performance.now() / 200)) : 1;
+    }
     const showFps = settings.showFps || this.debug.visible;
     this.fpsText.setVisible(showFps);
     if (showFps) this.fpsText.setText(`${Math.round(perf.fps)} fps`);

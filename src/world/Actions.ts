@@ -38,11 +38,19 @@ interface Act { kind: Kind; tx: number; ty: number; icon: string; tool: ToolKind
 const mk = (): Act => ({ kind: 'none', tx: 0, ty: 0, icon: 'icon_hand', tool: null, slot: -1, what: '', prio: 0 });
 
 export const CAN_CAP = [40, 55, 70, 85];
+/** Segundos (tempo real) até dormir à força quando a energia zera. */
+export const EXHAUST_SECONDS = 300;
+
+export function startExhaustion(): void {
+  if (G.flags.exhaust === undefined) {
+    G.flags.exhaust = EXHAUST_SECONDS;
+    bus.emit('toast', 'Você está exausto! Vai desmaiar em 5 minutos — coma algo ou vá dormir.', 'warn');
+  }
+}
 
 /** Ação contextual: escolhe o alvo (auto-mira raio 1) e executa com a ferramenta certa. */
 export class Actions {
   readonly cur: Act = mk();
-  private tmp: Act = mk();
   private lastTx = -999;
   private lastTy = -999;
   private lastKind: Kind = 'none';
@@ -50,21 +58,13 @@ export class Actions {
 
   constructor(private h: WorldHost) {}
 
-  /** Avalia a melhor ação. Prioridade: colher > coletar > máquina > interagir > ferramenta. */
+  /** Avalia a ação no tile à frente. Prioridade: colher > coletar > máquina > interagir > ferramenta. */
   evaluate(): Act {
     const p = this.h.player;
     const f = p.facingTile(this.facing);
     const best = this.cur;
+    // alvo é sempre o tile à frente do personagem (na direção em que olha)
     this.evalTile(f.x, f.y, true, best);
-    // auto-mira: vizinhos só para colher/interagir
-    if (best.prio < PRIO.interact) {
-      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
-        const x = p.tx + i, y = p.ty + j;
-        if (x === f.x && y === f.y) continue;
-        this.evalTile(x, y, false, this.tmp);
-        if (this.tmp.prio > best.prio) Object.assign(best, this.tmp);
-      }
-    }
     if (best.kind === 'none') {
       const s = selected();
       const d = s ? ITEMS[s.id] : null;
@@ -182,10 +182,12 @@ export class Actions {
     if (Math.abs(dx) > Math.abs(dy)) p.face(dx < 0 ? 2 : 3); else p.face(dy < 0 ? 1 : 0);
   }
 
+  /** Gasta energia. Exausto (0) ainda age, mas inicia a contagem para dormir à força. */
   private spend(t: ToolKind): boolean {
     const pl = G.player;
-    if (pl.energy <= 0) { bus.emit('toast', 'Você está exausto demais... vá dormir.', 'warn'); return false; }
+    if (pl.energy <= 0) { startExhaustion(); return true; }
     pl.energy = Math.max(0, pl.energy - toolEnergy(pl.tools[t] ?? 0));
+    if (pl.energy <= 0) startExhaustion();
     return true;
   }
 
@@ -389,6 +391,7 @@ export class Actions {
         if (!cur || cur.id !== st.id) return;
         takeFromSlot(slot, 1);
         G.player.energy = Math.min(G.player.maxEnergy, G.player.energy + gain);
+        delete G.flags.exhaust;
         bus.emit('toast', `+${gain} de energia`, 'good');
       } }, { label: 'Não' }],
     });

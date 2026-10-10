@@ -15,13 +15,23 @@ export function canTill(L: Location, x: number, y: number): boolean {
   if (!L.inb(x, y) || !(L.id === 'farm' || L.id === 'greenhouse')) return false;
   const i = L.idx(x, y);
   const t = L.terrain[i];
-  if (t !== T.Grass && t !== T.Dirt && !(L.id === 'greenhouse' && t === T.Floor)) return false;
+  // estradas (terra batida) não podem ser aradas
+  if (t !== T.Grass && !(L.id === 'greenhouse' && t === T.Floor)) return false;
   return !L.occ[i] && !isTilled(L, i);
+}
+
+/** Tile vizinho (8 direções) a água: o solo arado fica sempre úmido. */
+export function nearWater(L: Location, i: number): boolean {
+  const x = i % L.w, y = Math.floor(i / L.w);
+  for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) {
+    if ((j || k) && L.terrainAt(x + k, y + j) === T.Water) return true;
+  }
+  return false;
 }
 
 export function till(L: Location, x: number, y: number): void {
   const i = L.idx(x, y);
-  L.soil[i] = SOIL_TILLED | (L.soil[i] & 0b1100);
+  L.soil[i] = SOIL_TILLED | (L.soil[i] & 0b1100) | (nearWater(L, i) ? SOIL_WET : 0);
 }
 
 export function water(L: Location, x: number, y: number): boolean {
@@ -96,12 +106,15 @@ export function growDay(L: Location, newSeason: number): { died: number; reverte
   for (let i = 0; i < L.soil.length; i++) {
     const s = L.soil[i];
     if (!(s & SOIL_TILLED)) continue;
+    const wetSpot = nearWater(L, i);
     let ns = s & ~SOIL_WET;
     if (!L.crops.has(i)) {
       const days = ((ns >> 4) & 15) + 1;
       ns = (ns & 0x0f) | (Math.min(15, days) << 4);
-      if (days >= 3 && !greenhouse) { ns = 0; reverted.push(i); }
+      // sem semente: some em 3 dias (perto da água, em 1 dia)
+      if ((days >= 3 || wetSpot) && !greenhouse) { ns = 0; reverted.push(i); }
     }
+    if (ns && wetSpot) ns |= SOIL_WET;
     L.soil[i] = ns;
   }
   return { died, reverted };

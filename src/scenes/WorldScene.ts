@@ -172,7 +172,20 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     this.t += dt;
     input.locked = uiState.panelOpen || this.transitioning;
     this.keyboardMove();
-    if (!uiState.panelOpen && !this.transitioning) time.update(dt);
+    if (!uiState.panelOpen && !this.transitioning) {
+      time.update(dt);
+      // exaustão: contagem regressiva (tempo real) até dormir à força
+      if (G.flags.exhaust !== undefined) {
+        G.flags.exhaust -= dt;
+        if (G.player.energy > 0) delete G.flags.exhaust;
+        else if (G.flags.exhaust <= 0) {
+          delete G.flags.exhaust;
+          bus.emit('toast', 'Você desmaiou de cansaço...', 'warn');
+          this.sleep(true, false);
+        }
+      }
+    }
+    uiState.exhaust = G.flags.exhaust ?? -1;
     const p = this.player;
     p.tired = G.player.energy < G.player.maxEnergy * 0.15;
     p.update(dt, this.loc);
@@ -310,7 +323,7 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
   }
 
   /** Dorme: escurece, resumo de vendas, salva e avança o dia. */
-  sleep(passOut: boolean): void {
+  sleep(passOut: boolean, penalize = true): void {
     if (this.transitioning) return;
     this.transitioning = true;
     const ui = this.scene.get('UI') as UIScene;
@@ -319,7 +332,7 @@ export class WorldScene extends Phaser.Scene implements WorldHost {
     this.cameras.main.once('camerafadeoutcomplete', () => {
       ui.setHudVisible(false);
       this.drops.persist(this.loc);
-      const sum = endDay(passOut);
+      const sum = endDay(passOut, penalize);
       G.player.loc = 'house'; G.player.x = HOUSE_WAKE.x; G.player.y = HOUSE_WAKE.y; G.player.dir = 0;
       G.time.min = DAY_START;
       G.flags.justWoke = 1;

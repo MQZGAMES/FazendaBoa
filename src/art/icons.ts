@@ -28,9 +28,10 @@ export function drawTool(pc: PixelCanvas, tool: string, tier: number): void {
       break;
     }
     case 'axe': {
-      handle(pc, 3, 14, 10, 3);
-      pc.rect(5, 2, 5, 6, m[2]); pc.vline(4, 3, 6, m[3]); pc.vline(5, 2, 7, m[3]); pc.rect(9, 2, 2, 5, m[1]);
-      pc.set(4, 2, m[2]); pc.set(4, 7, m[1]);
+      // fio da lâmina do lado direito (o lado que conduz o golpe)
+      handle(pc, 2, 14, 8, 4);
+      pc.rect(7, 2, 6, 6, m[2]); pc.vline(7, 2, 7, m[1]); pc.vline(13, 3, 6, m[3]); pc.vline(12, 2, 7, m[3]);
+      pc.set(13, 2, m[2]); pc.set(13, 7, m[2]); pc.hline(8, 11, 2, m[3]); pc.rect(8, 3, 2, 4, m[1]);
       break;
     }
     case 'pickaxe': {

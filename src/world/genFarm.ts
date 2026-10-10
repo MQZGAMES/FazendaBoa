@@ -9,6 +9,25 @@ export const HOUSE_DOOR = { x: 38, y: 10 };
 export const FARM_SPAWN = { x: 39 * 16, y: 12 * 16 + 8 };
 export const BIN_POS = { x: 43, y: 10 };
 
+/** Largura do mar ao redor da ilha (tiles). */
+export const ISLAND_SEA = 3;
+
+/** A fazenda é uma ilha: bordas sem saída terminam em água (caminhos de saída viram pontes de terra). */
+export function applyIslandBorder(L: Location): void {
+  for (let y = 0; y < L.h; y++) for (let x = 0; x < L.w; x++) {
+    const edge = Math.min(x, y, L.w - 1 - x, L.h - 1 - y);
+    if (edge >= ISLAND_SEA) continue;
+    const i = L.idx(x, y);
+    if (L.terrain[i] === T.Dirt) continue;
+    const hit = L.objAt(x, y);
+    if (hit) L.remove(hit.i);
+    L.crops.delete(i);
+    L.soil[i] = 0;
+    L.terrain[i] = T.Water;
+  }
+  L.refreshAllSolid();
+}
+
 /** Gera a fazenda inicial cheia de mato, pedras, galhos e tocos, com rio a leste. */
 export function generateFarm(seed: number): Location {
   const L = new Location('farm', FARM_W, FARM_H);
@@ -50,6 +69,7 @@ export function generateFarm(seed: number): Location {
   path([[39, 11], [39, 20], [39, 40], [39, 64]], 3);      // casa → vila (sul)
   path([[39, 22], [20, 22], [10, 31], [0, 31]], 2);         // → floresta (oeste)
   path([[33, 9], [26, 7], [24, 3], [24, 0]], 2);             // → mina (norte)
+  applyIslandBorder(L);
   // terreiro em frente à casa
   for (let y = 11; y < 15; y++) for (let x = 35; x < 44; x++) { if ((x === 35 || x === 43) && (y === 14)) continue; setT(x, y, T.Dirt); }
 
@@ -77,9 +97,9 @@ export function generateFarm(seed: number): Location {
   // Borda de floresta densa
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const edge = Math.min(x, y, W - 1 - x, H - 1 - y);
-    if (edge > 2) continue;
+    if (edge < ISLAND_SEA || edge > ISLAND_SEA + 2) continue;
     if (L.exitAt(x, y)) continue;
-    if (((x + y * 2) % 3 === 0 || rng.chance(0.35)) && edge <= 2) tree(x, y);
+    if ((x + y * 2) % 3 === 0 || rng.chance(0.35)) tree(x, y);
   }
   // Bosques e entulho
   for (let y = 3; y < H - 3; y++) for (let x = 3; x < W - 3; x++) {
